@@ -1,0 +1,34 @@
+# Genesis Security — default policy
+# Copy this file (genesis-security policy > my_policy.toml), edit it, then either
+#   Policy.load("my_policy.toml")                      in code, or
+#   export GENESIS_SECURITY_POLICY=my_policy.toml      with GenesisSecurityGate.from_env()
+
+[egress]
+# Hosts an agent may send data to. Everything else needs owner confirmation.
+allowlist = ["api.anthropic.com", "localhost"]
+# Tools that move data out of the system.
+tools = ["http_request", "send_email", "send_message", "git_push", "webhook"]
+
+[tools]
+# Irreversible actions always go through the Human Gate (HOLD → owner).
+irreversible = [
+  "delete_file", "send_email", "send_message", "transfer_funds",
+  "git_push", "place_order", "change_permissions", "shell_exec",
+]
+
+[shell]
+# First word of a shell command must be in this list; ; & | ` $ > < are always refused.
+allowlist = ["ls", "cat", "grep", "python", "pytest", "git"]
+
+[agents]
+hop_budget = 5          # max agent-to-agent hops per message chain
+quarantine_after = 2    # injection strikes before an agent is quarantined
+
+[secrets]
+# Regexes for secrets that must never leave the system or enter memory.
+patterns = [
+  'sk-[A-Za-z0-9_-]{16,}',
+  '(?i)(api[_-]?key|secret|token|password)\s*[=:]\s*\S{6,}',
+  '-----BEGIN [A-Z ]*PRIVATE KEY-----',
+  'GENESIS_TEST_KEY=\S+',
+]

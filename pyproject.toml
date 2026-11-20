@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "genesis-security"
+version = "1.0.0"
+description = "Defensive runtime for AI agents and multi-agent systems: prompt-injection tripwires, trust tiers, tool gating, signed agent messages, tamper-evident audit."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Bunyawat Dechanon (ElmatadorZ)" }]
+keywords = ["ai-security", "prompt-injection", "multi-agent", "llm", "agent-security", "claude"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Security",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+]
+dependencies = []   # stdlib only, by design
+
+[project.scripts]
+genesis-security = "genesis_security.cli:main"
+
+[tool.setuptools]
+packages = ["genesis_security"]
+
+[tool.setuptools.package-data]
+genesis_security = ["default_policy.toml"]
