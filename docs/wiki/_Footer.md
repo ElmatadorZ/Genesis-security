@@ -1,0 +1,1 @@
+[Genesis Security](https://github.com/ElmatadorZ/Genesis-security) · Apache 2.0 · © 2026 Bunyawat Dechanon (ElmatadorZ) · Report vulnerabilities privately via [SECURITY.md](https://github.com/ElmatadorZ/Genesis-security/blob/main/SECURITY.md)
