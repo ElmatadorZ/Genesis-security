@@ -66,7 +66,17 @@ def _cmd_policy(_: argparse.Namespace) -> int:
     return 0
 
 
+def _utf8_console() -> None:
+    """Windows consoles default to cp1252/cp874; verdict text contains → and Thai."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _utf8_console()
     ap = argparse.ArgumentParser(prog="genesis-security",
                                  description="Defensive runtime for AI agents and multi-agent systems.")
     ap.add_argument("--version", action="version", version=f"genesis-security {__version__}")
