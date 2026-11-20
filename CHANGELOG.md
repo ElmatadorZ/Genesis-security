@@ -11,4 +11,9 @@ First public release.
 - TOML policy, env-based key loading, fail-closed brain adapter for Claude
 - CLI: `demo`, `scan`, `verify-audit`, `keygen`, `pin`, `policy`
 - Thai-aware injection scanning (handles NFKC splitting of สระอำ)
-- 42 unit tests, stdlib only
+- Red-team hardened before release (see docs/redteam-report.md): 22 bypasses found across two rounds and fixed —
+  wrapper breakout, URL/egress evasions, encoded and split secrets, `python -c` / `git -c`,
+  agent message replay / misdelivery / staleness, memory rule phrasing, audit rewrite / truncation / deletion
+- HMAC-keyed audit chain, `checkpoint` command, `verify-audit --checkpoint`
+- `genesis-security redteam` command; red-team suite runs in CI
+- 43 unit tests + 45 red-team cases, stdlib only

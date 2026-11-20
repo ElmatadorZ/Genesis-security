@@ -1,10 +1,11 @@
 # Copyright 2026 Bunyawat Dechanon (ElmatadorZ)
 # SPDX-License-Identifier: Apache-2.0
-"""Command line: genesis-security {demo, scan, verify-audit, keygen, pin, policy}."""
+"""Command line: genesis-security {demo, scan, verify-audit, checkpoint, keygen, pin, policy, redteam}."""
 from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import secrets
 import sys
 from importlib import resources
@@ -27,10 +28,26 @@ def _cmd_scan(a: argparse.Namespace) -> int:
     return worst  # exit 0 clean, 1 suspicious, 2 injected — handy in CI
 
 
+def _audit(log: str) -> AuditTrail:
+    from .audit import derive_audit_key
+    from .gate import key_from_env
+    try:
+        key = derive_audit_key(key_from_env())
+    except RuntimeError as e:
+        raise SystemExit(f"{e}\n(the audit chain is keyed with the same secret the gate uses)")
+    return AuditTrail(log, key=key)
+
+
 def _cmd_verify(a: argparse.Namespace) -> int:
-    ok, n = AuditTrail(a.log).verify()
-    print(f"intact={ok} entries={n}")
+    cp = json.loads(Path(a.checkpoint).read_text()) if a.checkpoint else None
+    ok, n = _audit(a.log).verify(checkpoint=cp)
+    print(f"intact={ok} entries={n}" + (f" checkpoint={cp['count']}" if cp else ""))
     return 0 if ok else 1
+
+
+def _cmd_checkpoint(a: argparse.Namespace) -> int:
+    print(json.dumps(_audit(a.log).checkpoint()))
+    return 0
 
 
 def _cmd_keygen(_: argparse.Namespace) -> int:
@@ -57,12 +74,18 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("demo", help="run the 12-scenario attack demo").set_defaults(fn=lambda a: run_demo())
     s = sub.add_parser("scan", help="scan files (or - for stdin) for prompt injection")
     s.add_argument("files", nargs="+"); s.set_defaults(fn=_cmd_scan)
-    v = sub.add_parser("verify-audit", help="verify an audit log hash chain")
-    v.add_argument("log"); v.set_defaults(fn=_cmd_verify)
+    v = sub.add_parser("verify-audit", help="verify an audit log chain (needs GENESIS_SECURITY_KEY)")
+    v.add_argument("log")
+    v.add_argument("--checkpoint", help="JSON file from `checkpoint`; also detects truncation/deletion")
+    v.set_defaults(fn=_cmd_verify)
+    k = sub.add_parser("checkpoint", help="print {count, head} — store it where agents can't write")
+    k.add_argument("log"); k.set_defaults(fn=_cmd_checkpoint)
     sub.add_parser("keygen", help="print a new GENESIS_SECURITY_KEY").set_defaults(fn=_cmd_keygen)
     p = sub.add_parser("pin", help="print sha256 pins for skill/plugin files")
     p.add_argument("files", nargs="+"); p.set_defaults(fn=_cmd_pin)
     sub.add_parser("policy", help="print the default policy TOML").set_defaults(fn=_cmd_policy)
+    sub.add_parser("redteam", help="run the red-team suite (exit code = failures)").set_defaults(
+        fn=lambda a: __import__("genesis_security.redteam", fromlist=["main"]).main())
     a = ap.parse_args(argv)
     return a.fn(a)
 

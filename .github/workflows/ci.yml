@@ -26,3 +26,5 @@ jobs:
         run: python -m unittest discover -s tests -t . -v
       - name: Demo passes
         run: genesis-security demo
+      - name: Red team (0 failures required)
+        run: genesis-security redteam

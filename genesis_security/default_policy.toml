@@ -4,10 +4,13 @@
 #   export GENESIS_SECURITY_POLICY=my_policy.toml      with GenesisSecurityGate.from_env()
 
 [egress]
-# Hosts an agent may send data to. Everything else needs owner confirmation.
+# Hosts an agent may reach without asking. Any URL found anywhere in any tool's
+# arguments is checked against this list; other hosts → HOLD (owner decides).
 allowlist = ["api.anthropic.com", "localhost"]
-# Tools that move data out of the system.
+# Tools that move data out even without a URL in their args (secret check always applies).
 tools = ["http_request", "send_email", "send_message", "git_push", "webhook"]
+# Tools allowed to reach ANY host (e.g. a read-only web search). Secret and trifecta checks still apply.
+open_tools = []
 
 [tools]
 # Irreversible actions always go through the Human Gate (HOLD → owner).
@@ -17,15 +20,23 @@ irreversible = [
 ]
 
 [shell]
-# First word of a shell command must be in this list; ; & | ` $ > < are always refused.
+# First word must be listed; ; & | ` $ > < and newlines are always refused.
 allowlist = ["ls", "cat", "grep", "python", "pytest", "git"]
+
+[shell.deny_args]
+# Options that turn an allowlisted command into arbitrary code execution.
+python = ["-c"]
+git = ["-c", "--config", "--upload-pack", "--receive-pack", "--exec", "--config-env"]
+grep = ["--pre"]
 
 [agents]
 hop_budget = 5          # max agent-to-agent hops per message chain
 quarantine_after = 2    # injection strikes before an agent is quarantined
+max_age_s = 300         # signed messages older than this (or replayed) are refused
 
 [secrets]
 # Regexes for secrets that must never leave the system or enter memory.
+# Also matched against base64-, hex- and url-decoded views of the text.
 patterns = [
   'sk-[A-Za-z0-9_-]{16,}',
   '(?i)(api[_-]?key|secret|token|password)\s*[=:]\s*\S{6,}',

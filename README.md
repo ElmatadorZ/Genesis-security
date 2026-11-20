@@ -55,14 +55,15 @@ flowchart TD
 | Attack | GSX | How |
 |---|---|---|
 | Hidden instructions in web pages, files, tool output | 01–03 | L1 scan + wrapped as `<untrusted>` data; actions from T3 blocked at L2 |
-| Agent sends your secrets out | 06 | Secret regex on all egress → BLOCK (S1); unlisted hosts → HOLD |
-| Shell injection (`;`, `\|`, backticks) | 05 | Command allowlist + metachar refusal |
+| Agent sends your secrets out | 06 | Secret check (incl. base64/hex/url-encoded, split across args) → BLOCK; any URL to an unlisted host, in any tool, nested anywhere → HOLD |
+| Shell injection (`;`, `\|`, `$()`, `python -c`, `git -c`) | 05 | Command allowlist, metachar refusal, per-command dangerous options |
 | Fake or altered agent messages | 07 | HMAC-signed envelopes |
 | Agent grabs more permissions | 11 | Scope can't exceed what was granted |
 | Agents ping-pong forever | 10 | Hop budget |
 | Poisoning long-term memory / Genome | 08 | T3 may write tagged facts only, never rules |
 | Malicious or changed SKILL.md / plugin | 12 | SHA-256 pinning (`genesis-security pin`) |
-| Editing the logs afterwards | 13 | Append-only hash chain, file-locked, rotation-safe |
+| Replaying or misdelivering agent messages | 07 | Signed nonce + timestamp, recipient check |
+| Editing, truncating or deleting the logs | 13 | HMAC-keyed chain + checkpoints, file-locked, rotation-safe |
 
 ## Hooks
 
@@ -90,7 +91,9 @@ export GENESIS_SECURITY_AUDIT=logs/audit.jsonl
 |---|---|
 | `genesis-security demo` | 12 scenarios + audit tamper check |
 | `genesis-security scan FILE...` | injection scan; exit 0 clean / 1 suspicious / 2 injected (use in CI) |
-| `genesis-security verify-audit LOG` | verify the hash chain |
+| `genesis-security redteam` | run 40+ attack cases against your install; exit code = failures |
+| `genesis-security checkpoint LOG` | print `{count, head}` — keep it where agents can't write |
+| `genesis-security verify-audit LOG [--checkpoint cp.json]` | verify the keyed chain (needs `GENESIS_SECURITY_KEY`); with a checkpoint also catches truncation/deletion |
 | `genesis-security keygen` | new HMAC key |
 | `genesis-security pin FILE...` | SHA-256 pins for skills/plugins |
 | `genesis-security policy` | print the default policy |
@@ -105,6 +108,9 @@ export GENESIS_SECURITY_AUDIT=logs/audit.jsonl
 - **You must tag `origin_tier` honestly.** The gate can't know who asked unless your agent loop tells it.
 - **The gate only protects tools you route through it.** A tool the agent can call directly bypasses everything.
 - **HMAC proves a message came from a holder of the key**, not which agent. Give agents in different trust zones different keys.
+- **Custom encodings to allowlisted hosts get through.** Base64, hex, url-encoding and split secrets are caught; rot13, gzip or XOR to a host you allowlisted are not. Keep the allowlist short.
+- **Replay protection is per process.** After a restart, `max_age_s` (default 300 s) bounds the window.
+- Full results: [docs/redteam-report.md](docs/redteam-report.md).
 - Not a replacement for OS sandboxing, network firewalls, or least-privilege credentials. Use it alongside them.
 
 ## Development

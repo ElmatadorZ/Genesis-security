@@ -30,6 +30,16 @@ INJECTION_PATTERNS: list[tuple[str, str, re.Pattern]] = [
     ("GSX-09", "urgency", re.compile(
         r"(urgent|immediately|right\s+now|do\s+not\s+ask|without\s+(asking|confirmation))|ด่วน|ห้ามถาม", re.I)),
 ]
+# Cheap substring prefilter per pattern: skip the regex when none of these appear.
+PREFILTER: dict[str, tuple[str, ...]] = {
+    "override": ("ignore", "disregard", "forget", "ลืม", "ไม่ต้องสนใจ"),
+    "role_swap": ("you are now", "act as", "จากนี้ไป"),
+    "forged_authority": ("system", "admin", "anthropic", "owner", "safeguard"),
+    "ai_directed": ("you are a", "ai agent", "ถ้าคุณเป็น"),
+    "exfil_request": ("send", "post", "upload", "forward", "email", "ส่ง"),
+    "audit_tamper": ("audit", "log", "ไม่ต้องบันทึก"),
+    "urgency": ("urgent", "immediately", "right now", "do not ask", "without", "ด่วน", "ห้ามถาม"),
+}
 ZERO_WIDTH = re.compile("[​‌‍⁠﻿]")
 HIDDEN_HTML = re.compile(r"<!--.*?-->|display\s*:\s*none|color\s*:\s*(#fff\b|#ffffff|white)", re.I | re.S)
 LONG_B64 = re.compile(r"[A-Za-z0-9+/]{80,}={0,2}")
@@ -42,10 +52,14 @@ def scan_injection(text: str) -> tuple[str, list[str], list[str]]:
     # NFKC folds look-alike Latin (fullwidth, ligatures) but splits Thai SARA AM (ำ → ํ + า),
     # so match against both forms.
     norm = unicodedata.normalize("NFKC", stripped)
+    views = [stripped] if norm == stripped else [stripped, norm]
+    lowered = " ".join(v.lower() for v in views)
     gsx: set[str] = set()
     hits: list[str] = []
     for gid, name, pat in INJECTION_PATTERNS:
-        if pat.search(stripped) or pat.search(norm):
+        if not any(k in lowered for k in PREFILTER.get(name, ("",))):
+            continue
+        if any(pat.search(v) for v in views):
             gsx.add(gid)
             hits.append(name)
     if ZERO_WIDTH.search(text):

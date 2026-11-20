@@ -13,22 +13,29 @@ from pathlib import Path
 @dataclass
 class Policy:
     egress_allowlist: set[str] = field(default_factory=set)
-    irreversible_tools: set[str] = field(default_factory=set)
     egress_tools: set[str] = field(default_factory=set)
+    open_tools: set[str] = field(default_factory=set)
+    irreversible_tools: set[str] = field(default_factory=set)
     shell_allowlist: set[str] = field(default_factory=set)
+    shell_deny_args: dict[str, list[str]] = field(default_factory=dict)
     hop_budget: int = 5
     quarantine_after: int = 2
+    max_age_s: float = 300.0
     secret_patterns: list[re.Pattern] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, d: dict) -> "Policy":
+        eg, sh, ag = d.get("egress", {}), d.get("shell", {}), d.get("agents", {})
         return cls(
-            egress_allowlist=set(d.get("egress", {}).get("allowlist", [])),
-            egress_tools=set(d.get("egress", {}).get("tools", [])),
+            egress_allowlist={h.lower() for h in eg.get("allowlist", [])},
+            egress_tools=set(eg.get("tools", [])),
+            open_tools=set(eg.get("open_tools", [])),
             irreversible_tools=set(d.get("tools", {}).get("irreversible", [])),
-            shell_allowlist=set(d.get("shell", {}).get("allowlist", [])),
-            hop_budget=int(d.get("agents", {}).get("hop_budget", 5)),
-            quarantine_after=int(d.get("agents", {}).get("quarantine_after", 2)),
+            shell_allowlist=set(sh.get("allowlist", [])),
+            shell_deny_args={k: list(v) for k, v in sh.get("deny_args", {}).items()},
+            hop_budget=int(ag.get("hop_budget", 5)),
+            quarantine_after=int(ag.get("quarantine_after", 2)),
+            max_age_s=float(ag.get("max_age_s", 300)),
             secret_patterns=[re.compile(p) for p in d.get("secrets", {}).get("patterns", [])],
         )
 

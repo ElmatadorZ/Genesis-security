@@ -76,7 +76,7 @@ Taint propagation: อะไรที่ผ่าน T3 เป็น T3 ตล�
 
 ## 5. MULTI-AGENT DEFENSE
 
-Envelope: `from, to, task_id, capability_scope, hop, taint, sig(HMAC)` — ไม่มีหรือ sig ไม่ตรง → T3/BLOCK; scope ขยายได้โดย T0/T1 เท่านั้น; hop เกิน budget → หยุด; taint เป็น max
+Envelope: `from, to, task_id, capability_scope, hop, taint, ts, nonce, sig(HMAC)` — ไม่มีหรือ sig ไม่ตรง → T3/BLOCK; replay, เก่าเกิน max_age, หรือส่งผิดผู้รับ → BLOCK; scope ขยายได้โดย T0/T1 เท่านั้น; hop เกิน budget → หยุด; taint เป็น max
 
 Separation of powers: Reader (อ่าน T3) ไม่มีสิทธิ์ส่งออก/เขียน memory · Executor ไม่อ่าน T3 ดิบ · Sentinel ตอบเฉพาะ T0/T1
 
@@ -95,7 +95,7 @@ Map → Surface → Match GSX → Score (L×I) → Mitigate (brain + body) → V
 | Shadow Gate | ถูกสั่งให้ข้าม | 03 | non-skippable |
 | Echo Memory / MemoryStore | poisoning | 08 | `on_memory_write` fact-only จาก T3 |
 | Affective Genome | emotional manipulation | 08, 09 | event จาก T3 ไม่ reweight council |
-| AuditTrail | ลบ/แก้ | 13 | hash chain + `verify-audit` ทุก session start |
+| AuditTrail | ลบ/แก้/ตัดท้าย | 13 | HMAC chain + `checkpoint` เก็บนอกเครื่อง + `verify-audit --checkpoint` ทุก session start |
 | SkynetClaw tools | injection → shell, exfil | 02, 05, 06 | `pre_tool_call`, shell/egress allowlist |
 | Skill loader | malicious SKILL.md | 12 | `on_skill_load` + `genesis-security pin` |
 | MCP connectors | rug-pull | 04 | pin tool description hash |
