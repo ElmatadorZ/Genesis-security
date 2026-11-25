@@ -23,7 +23,7 @@ A security enforcement layer that decides what AI agents may trust, access, exec
 | P3 | **No privileged action without policy authorization.** | Default deny: a tool runs only if policy declares it and its capabilities (ADR-0003). |
 | P4 | **Every security decision is auditable.** | Every verdict is in a tamper-evident ledger, with no secrets in it (ADR-0007). |
 | P5 | **Fail closed.** | Errors, timeouts, missing config and unknown inputs never result in ALLOW (ADR-0004). |
-| P6 | **No security claims without evidence.** | Alignment with a framework is stated as a mapping with tests, never as certification. |
+| P6 | **Never trust a security claim without reproducible evidence.** | Alignment with a framework is stated as a mapping with tests, never as certification. Every claim links to a test anyone can rerun. |
 
 ## 2. Problem and users
 
@@ -52,7 +52,7 @@ One security core; editions differ in operations, not in protection.
 | **Genesis Security Enterprise** | Commercial | Central policy management, RBAC for operators, dashboard, SIEM connectors, compliance evidence packs, multi-tenant isolation, support SLA | Phase 3, after Core v2.0 |
 | **Genesis Security Cloud** | Commercial | Managed gateway, hosted policy control, fleet monitoring | Future; not before Enterprise has paying users |
 
-**Rule:** no protection that Core users need to be safe is held back for Enterprise. Enterprise sells management at scale, evidence and support.
+**Rule (Governance D2, approved):** default-deny, policy validation, fail-closed behaviour, tool authorization, prompt-injection defence, identity verification, audit integrity and security updates for significant vulnerabilities are in every edition. Enterprise sells management at scale, SSO and governance, reporting, evidence and support.
 
 ## 5. Functional requirements
 
@@ -154,9 +154,13 @@ Genesis Security is designed to align with these frameworks. **Alignment is a se
 - "Prevents prompt injection". We claim: injected content cannot authorize actions through the gate.
 - Any test result we haven't run and published.
 
-## 10. Open decisions for the owner
+## 10. Decisions
 
-1. **Breaking change for v2.0.** Default deny (ADR-0003) breaks every v1 integration that relies on undeclared tools. Proposal: v1.x keeps current behaviour with a deprecation warning; v2.0 flips the default.
-2. **Enterprise boundary.** Confirm the "no protection held back" rule (§4).
-3. **External reviewer** for gate G9: who, and when.
-4. **ACS overlap.** Adopt, map to, or ignore the OWASP Agent Control Standard after evaluation.
+Recorded in [Governance Decision v1.0](governance-decisions.md) (2026-11-25):
+
+1. **Default-deny in v2.0** — approved in principle, with a v1.x compatibility mode under binding conditions (clear "NOT SECURE ENFORCEMENT" warnings, a shadow compatibility check, a migration guide, never presented as secure).
+2. **No security behind a paywall** — approved; the full list of what every edition must include is in D2.
+3. **External reviewer** — pending. Two layers: internal independent review + external security review. AI assistants are not counted as independent auditors.
+4. **Phase 1 code** — not yet approved; Phase 1 items may be prepared as issues.
+
+Still open: **ACS overlap** (adopt, map to, or ignore the OWASP Agent Control Standard) — backlog P0-05.

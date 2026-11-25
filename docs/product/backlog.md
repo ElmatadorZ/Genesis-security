@@ -16,6 +16,8 @@ Size: S ≈ ≤ 1 day · M ≈ 2–4 days · L ≈ 1–2 weeks (solo builder pac
 
 ## Phase 1 — Harden the security core (target: Core v2.0)
 
+> **Status:** approved for *preparation* only ([Governance D5](governance-decisions.md)). No source changes until PR #1 is reviewed and D5 is approved.
+
 Gate to leave Phase 1: release gates G1–G6 and G8 pass; 0 open High findings.
 
 | ID | Item | Closes | Size | Acceptance criteria |
@@ -32,6 +34,8 @@ Gate to leave Phase 1: release gates G1–G6 and G8 pass; 0 open High findings.
 | P1-10 | Recipient allowlists for `message` capability | GS-AUD-14 · FR-AUTH-4 | S | 1. Email to unlisted domain → HOLD with domain in reason. 2. Channel IDs supported via `destination_args`. |
 | P1-11 | Conformance suite (separate from red team) | G3 · NFR-4 | M | 1. One test per failure scenario: brain error, owner error, store error, ledger error, policy error, malformed tier, missing key. 2. Every case asserts BLOCK/HOLD. 3. Runs in CI. |
 | P1-12 | Latency benchmark in CI | NFR-2 | S | p95 ≤ 2 ms for a declared, allowed tool on CI runners; regression > 20 % fails the job. |
+| P1-13 | **Shadow mode** — pre-upgrade compatibility check | Governance D1 · ADR-0003 | M | 1. `mode=shadow` runs v2.0 rules beside v1.x and never changes a v1.x verdict. 2. Report lists each call that v2.0 would BLOCK/HOLD, with reason. 3. `genesis-security policy shadow-report LOG` summarises it. |
+| P1-14 | **Migration guide** v1 → v2 | Governance D1 | S | 1. Ships with the first warning release. 2. Covers tool declarations, capabilities, shadow mode, key upgrade. 3. Contains no claim that compatibility mode is secure. |
 
 ## Phase 2 — Integration ecosystem
 
@@ -69,7 +73,11 @@ Start only after Core v2.0 ships and has external users.
 | P4-05 | SBOM (CycloneDX), signed tag, published hashes | G10 · GS-AUD-08 | Release assets include SBOM + SHA-256; tag signed |
 | P4-06 | Security advisory process | G8 | GitHub private reporting on; advisory template; CVE process documented |
 
-## Suggested order for the next three PRs
+## Approved preparation order (Governance v1.0)
+
+P1-03 (schema + fail-closed loading) → P1-01 (unknown-tool default-deny) → P1-02 (tool identity and capability authorization) → P1-11 + red-team additions. P1-13/P1-14 ship with the first v1.x release that warns.
+
+## Earlier suggestion for the next three PRs
 
 1. **P1-03** (policy schema, deny-all on failure) — smallest change that removes a High finding and is a prerequisite for P1-01/02.
 2. **P1-01 + P1-02** together (tool registry, default deny, capabilities) — removes the other two High findings.
