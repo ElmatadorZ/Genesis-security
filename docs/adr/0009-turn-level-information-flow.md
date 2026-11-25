@@ -243,8 +243,8 @@ A signature valid under one policy is not evidence of safety under another.
 
 | Guaranteed — inside the enforcement boundary, with an out-of-process runtime | Not guaranteed |
 |---|---|
-| Data of a declared class cannot reach a reader outside its allowed readers via the gateway, regardless of encoding |
-| Sink identity at the declared verification level only — hostname, pinned key, or SPIFFE ID (§5.8) | Egress outside the gateway (direct sockets, other processes) |
+| Data of a declared class cannot reach a reader outside its allowed readers via the gateway, regardless of encoding | Egress outside the gateway (direct sockets, other processes) |
+| Sink identity at the declared verification level only — hostname, pinned key, or SPIFFE ID (§5.8) | A stronger identity than the declared level (e.g. who operates a host verified only by `tls-hostname`) |
 | Flow state is recorded and attested by the runtime; agents cannot lower their own or others' state | Compromised agent code in **in-process** deployments (§2) |
 | Concurrent reads and egress cannot race past the policy; an authorization is used once, for the exact authorized bytes, and is re-evaluated if state changed before sending (§4) | Compromise of the runtime or host |
 | Only the owner declassifies; approvals are single-use and scoped (§8) | That a sink honours `onward_sharing = false` beyond its declared basis (§5.10) |
