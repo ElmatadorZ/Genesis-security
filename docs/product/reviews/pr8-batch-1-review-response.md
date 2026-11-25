@@ -33,8 +33,24 @@ Review decision received: **Changes Requested** — 4 BLOCKERs, 4 REQUIRED, 3 AD
 
 1. **B1 has a process-boundary precondition.** Runtime attestation defeats a manipulated model in every deployment, but defeats **compromised agent code** only when the runtime runs out of process: Python has no memory isolation inside one process. ADR-0009 §2 states this and limits the cross-agent claim to out-of-process runtimes. Cross-host relays need runtime-to-runtime attestation (Enterprise, out of Core v2.0 scope).
 2. **B2 wording.** The review says combining "must not raise confidentiality automatically". Read literally, that would let private + public data become less restricted than private data. We implemented the intended rule: combining never **lowers** confidentiality (it only adds classes and narrows readers) and never **raises** integrity.
-3. **B3 is closed mainly by ordering, not locking alone.** Because data is released only after its classes are committed, a concurrent egress cannot yet contain that data; the write lock serialises the remaining cases.
+3. ~~B3 is closed mainly by ordering.~~ Withdrawn in round 2 (see below).
 
 ## Consistency edits outside batch 1
 
 So that batches 2 and 3 do not contradict the revised ADRs: threat model F3, F4 (+F4b–F4e), F7 (+F7b); architecture deployment shapes (out-of-process runtime); backlog P1-19, P1-20, P1-22a acceptance criteria. These will be reviewed with batches 2 and 3.
+
+## Round 2 (2026-11-25) — Changes Requested: B3, B4 open; B1 clarify; R3 expand
+
+| Item | Resolution | Where |
+|---|---|---|
+| **B3** stale authorization | Corrected wording: *the read-release ordering closes the race between data disclosure and flow-state elevation; egress authorization still requires a version-bound permit and revalidation before the external side effect to prevent stale authorization.* Added: frozen payload + digest; single-use permit bound to session, sink, payload digest, state version, policy fp, short expiry; revalidate-and-consume transaction immediately before sending, re-evaluating if the version changed; at-most-once restart rules (`issued` → expired, `consumed` without outcome → `unknown`, never auto-retried). No claim that a transaction makes a network call atomic. New tests listed | ADR-0009 §4, §11 |
+| **B4.1** principal ≠ hostname | Verification levels named separately with what each proves; `spiffe://` principal allowed only with `mtls-spiffe`, otherwise policy load fails; `mtls-spiffe` rejected as unsupported until its conformance tests pass | ADR-0009 §5.8 |
+| **B4.2** recipient fields | `recipient_mode` fixed/fields; locations header, query, path, body (JSON Pointer), form, metadata (to/cc/bcc, channel, thread); every occurrence and array element checked; `arguments_closed = true` required in mode 02; tools with selectors the gateway cannot see are unsupported in mode 02 | ADR-0009 §5.9 |
+| **B4.3** pooling | Pool keyed by sink, verified IP, port, verification mode, pins; no cross-sink reuse, no HTTP/2 coalescing; closed on policy reload, sink change and after bounded lifetime | ADR-0009 §5.6 |
+| **B1** clarity | Runtime is the technical signer, signing on behalf of the agent identity; signature does not prove the agent produced the state; sender identity checked against the session's store record; "shared store" defined as one authoritative store writable only by the deployment's runtimes | ADR-0009 §2 |
+| **B2** invariant | Readers are always derived from the receiver's policy for the session's classes plus valid grants; never taken from agents, tools or envelopes | ADR-0009 §1, §10 |
+| **R3** fingerprint | `policy_id` (per deployment), `policy_version`, `policy_fp` = SHA-256 of RFC 8785 canonical JSON of the validated policy; comparison table (same / previous / unknown); receiver never imports sender rules | ADR-0009 §10 |
+| ADR-0005 restore | Restore treated as master-key rotation (new master + `deployment_id`, re-provision); silent store+backup rollback stated as undetectable in Core, needs an external anchor (Enterprise) | ADR-0005 §7 |
+| ADR-0005 URI labels | Per-label DNS rules (1–63, hyphen not at either end of any label, no `xn--`, ≥2 labels, no all-digit TLD, ≤253); stated as stricter than SPIFFE | ADR-0005 §2 |
+
+Only these points were changed; batches 2 and 3 untouched except the backlog acceptance criteria for P1-19/P1-20 below.

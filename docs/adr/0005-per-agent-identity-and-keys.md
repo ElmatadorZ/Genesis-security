@@ -2,7 +2,7 @@
 
 - Decision: **Proposed** · Reviewer direction: URI identity approved in principle (architecture review round 2, 2026-11-25)
 - Implementation: **Not approved**
-- Date: 2026-11-25 · Revised after PR #1 round 1, review round 2, and PR #8 batch 1 (R1, ADR-0005 additions, B1)
+- Date: 2026-11-25 · Revised after PR #1 round 1, review round 2, and PR #8 batch 1 rounds 1 and 2
 - Closes: GS-AUD-06, GS-AUD-07
 
 ## Context
@@ -30,7 +30,7 @@ An identity is a URI of the form `spiffe://<trust-domain>/<path>` (SPIFFE ID sha
 | Rule | Reject if |
 |---|---|
 | Scheme | not exactly lowercase `spiffe` |
-| Trust domain | not lowercase `[a-z0-9.-]`, empty label, leading/trailing dot or hyphen, longer than 255 |
+| Trust domain | Checked as a DNS name, label by label: each label 1–63 characters of `[a-z0-9-]`, no leading or trailing hyphen in **any** label, no label beginning `xn--` (IDN look-alikes are out of scope), no empty label (so no leading, trailing or double dot), at least two labels, last label not all-digits (no IP literals), whole name ≤ 253 characters. This is **stricter than the SPIFFE specification** (which also allows `_`); a valid SPIFFE ID may therefore be rejected, deliberately |
 | Path | empty; empty segment (`//`); `.` or `..` segment; trailing `/`; characters outside `[a-z0-9._-]` per segment |
 | Encoding | any `%` (no percent-encoding at all); non-ASCII |
 | Components | userinfo, port, query or fragment present |
@@ -106,7 +106,9 @@ The signed bytes of every envelope include: sender identity, receiver identity, 
 - **Epochs are per identity**, uint32, stored in the state store with the **highest epoch ever issued** for that identity.
 - Rotation for one identity increments its epoch; a deployment-wide rotation increments every identity's epoch.
 - Verifiers accept `current` and `current − 1` during `rotation_overlap_s` (default 1 h), then only `current`.
-- **No rollback:** the verifier refuses any epoch lower than `current − 1`, and refuses `current − 1` after the overlap ends; the stored highest epoch never decreases, including after restore from backup (restore requires an epoch bump).
+- **No rollback during operation:** the verifier refuses any epoch lower than `current − 1`, and refuses `current − 1` after the overlap ends; the runtime never writes a lower highest-epoch.
+- **Restore is treated as master-key rotation.** A highest-epoch value restored together with the store cannot prove that no higher epoch was issued after the backup, so Core does not rely on it. `genesis-security restore` marks the store `restored`; the runtime refuses to start until `genesis-security rotate --after-restore` generates a **new master key and new `deployment_id`**, re-provisions every provider, and records the event in a new audit chain anchored to the last checkpoint. Credentials issued before the restore — at any epoch — derive from the old master key and no longer verify, so a rolled-back epoch counter cannot revive them.
+- **Silent rollback is out of Core scope.** Someone with write access to the store and its backups can roll both back without using `restore`; Core cannot detect that. Detection needs an anchor outside the store (an externally published audit checkpoint, an OS keychain or hardware monotonic counter); this is an Enterprise option. Write access to the store already defeats revocation, so the threat model treats the store's integrity as a precondition (ADR-0006).
 - **Revocation:** `(identity, epoch | all)` in the state store, effective immediately, `BLOCK` + audit, independent of the overlap window.
 - **Master key compromise:** generate a new master key **and** a new `deployment_id`, re-provision all providers at the next epoch, start a new audit chain anchored to the old chain's final checkpoint. Identities do not change.
 
