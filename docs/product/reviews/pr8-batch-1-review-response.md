@@ -82,3 +82,11 @@ Reviewer's agreement that B1 needs the out-of-process precondition, and that the
 | B4.2.3 JSON recursion | Recursive at every depth, keys compared after unescaping | ADR-0009 §5.9 |
 | B3.2 wording | One immutable buffer; digest = HTTP application bytes, not TLS ciphertext; verified before the first byte; the same buffer object is written; no re-serialisation | ADR-0009 §4 |
 | B2 scope note | Grants already stored as (session_id, class, scope); scope checked on every use (§8 tokens) | — |
+
+## Round 5 (2026-11-25) — R3, B3.2 accepted; B2 no new issue; B4.2 narrow clarification
+
+| Item | Resolution | Where |
+|---|---|---|
+| B4.2-A scope | Two input forms: structured fields (schema validation, CR/LF/control rejected, gateway encodes; e-mail allowed) vs ready-made strings (authority rules + strict steps 1–5); four-case table | ADR-0009 §5.9 |
+| B4.2-B dot segments | `.`/`..` rejected however written (literal, encoded, mixed), checked on the decoded segment; empty segments rejected | ADR-0009 §5.9 step 3 |
+| B4.2-C absolute URLs | Absolute `https://` only; authority rules (no userinfo, `\`, whitespace, `%`, non-ASCII); host = sink host, IP literals in any notation rejected unless declared, no trailing dot; strict port; no fragment; connection target always comes from the sink, never from the string | ADR-0009 §5.9 |

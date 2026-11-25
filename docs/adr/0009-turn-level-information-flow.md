@@ -182,15 +182,41 @@ Resolution rules:
 
    **Closed arguments.** In mode 02, every network/message sink must set `arguments_closed = true`, which covers **every** location: tool arguments, path parameters, query keys, headers, body members (at any depth), form fields and message metadata (including `channel_id` and `thread_id`). Anything not declared in the sink's argument schema or as a recipient field → **BLOCK**. Protocol-managed headers (`Host`, `Content-Length`, `Transfer-Encoding`, `Connection`, `TE`, `Upgrade`, `Expect`, and gateway-injected credentials) are produced by the gateway only; if an agent or tool supplies any of them → **BLOCK**.
 
-   **The gateway is the only encoder.** In mode 02 tools pass recipients and arguments as **structured fields** (path parameters, a query map, a header list, a body object, form fields, metadata); the gateway encodes them itself, once, when it builds the buffer (§4 step 1). If a tool supplies a ready-made URL, query string or form body instead, the gateway parses it in this fixed order, the same for path, query and form:
+   **The gateway is the only encoder.** Inputs reach the gateway in one of two forms, with different rules:
+
+   | Input form | Rules | Example |
+   |---|---|---|
+   | **Structured fields** — path parameters, a query map, a header list, a body object, form fields, metadata, passed as typed values | Validated against the sink's **argument schema** per field (type, length, allowed characters); CR, LF, NUL and other control characters are rejected in every field; recipient fields are then matched against `allow`. The strict parsing steps below do **not** apply; the gateway encodes the values itself, once, when it builds the buffer (§4 step 1) | `to = "user@example.com"` in metadata → allowed if the schema and `allow` permit it |
+   | **Ready-made strings** — an absolute URL, a query string or a form body supplied as text | Absolute-URL authority rules, then strict parsing steps 1–5 below | `https://api.bank.example/v1/transfers/?to=user@example.com` → **BLOCK** (`@` in a recipient value, step 3) |
+
+   | Case | Result |
+   |---|---|
+   | Structured body field `user@example.com` | Allowed per schema and `allow` |
+   | Same value as a recipient inside a ready-made URL | BLOCK (strict parsing) |
+   | Structured field containing CR or LF | BLOCK |
+   | Structured field that does not match its schema | BLOCK |
+
+   After the gateway has encoded a value, no component inside the boundary decodes or interprets it again.
+
+   **Absolute-URL authority rules** (ready-made URLs only; applied before steps 1–5, on the raw string, consistent with §5 rules 2–8):
+
+   - The URL must be **absolute** and start with exactly `https://` (lowercase); any other scheme, a scheme-relative (`//host`) or relative URL → BLOCK.
+   - Authority = the text between `https://` and the first `/`, `?` or `#`. **Reject** if it contains `@` (userinfo), `\`, whitespace, control or non-ASCII characters, or `%`.
+   - Host must be an ASCII hostname that **equals the sink's `host`** after ASCII lower-casing; reject a trailing dot, empty labels, IP literals (IPv4 in any form, including decimal, octal or hex, and `[IPv6]`) unless the sink declares that exact literal, and any host that differs from the sink's host.
+   - Port: absent → the sink's default; present → must be decimal digits without leading zeros, equal to the sink's `port`; an empty port (`host:`) → BLOCK.
+   - A **fragment** (`#…`) anywhere → BLOCK.
+   - Any character outside the RFC 3986 URI character set, or more than one `?` → BLOCK.
+   - The verified sink then supplies the connection target: DNS binding (rule 5), proxy `CONNECT` (rule 7) and TLS verification (rule 8) use the sink's declared host, never a host taken from the string.
+
+   Strict parsing of ready-made path, query and form strings, in this fixed order:
 
    1. **Split by structure first, on raw text:** path into segments on `/`; query into pairs on `&`, then each pair into key and value on the first `=`; form bodies the same way. Nothing is decoded before splitting.
    2. **Decode each component exactly once:** percent-decoding (RFC 3986) for path and query; for forms, `+` → space then percent-decoding (application/x-www-form-urlencoded).
-   3. **Reject** if a decoded **key** or **recipient value** contains `%`, `+`, `\`, a control or non-ASCII character, or any reserved character (`/ ? # [ ] @ ! $ & ' ( ) * , ; =`); if a decoded **path segment** contains `/`, `\`, `?` or `#` (from `%2F`, `%5C`, `%3F`, `%23`) or is `.` or `..` (from `%2E`); or if any component still contains a `%` followed by two hex digits after one decode (e.g. `%25xx`).
+   3. **Reject** if a decoded **key** or **recipient value** contains `%`, `+`, `\`, a control or non-ASCII character, or any reserved character (`/ ? # [ ] @ ! $ & ' ( ) * , ; =`); if a decoded **path segment** contains `/`, `\`, `?` or `#` (from `%2F`, `%5C`, `%3F`, `%23`); if a path segment is `.` or `..` **however it was written** — literal (`/api/../admin`), fully encoded (`%2E%2E`), or mixed (`.%2E`, `%2e.`) — checked on the decoded segment, so every representation is rejected the same way; if a path contains an empty segment (`//`) other than the single leading `/`; or if any component still contains a `%` followed by two hex digits after one decode (e.g. `%25xx`).
    4. **Detect duplicates on the decoded keys** (step 2 output), so `beneficiary` and `benefici%61ry` are the same key → **BLOCK**.
    5. The gateway then re-encodes the validated structure itself to build the buffer.
 
-   Inside the boundary no component decodes or reinterprets a value again. How the **remote** server decodes is outside the boundary; that is why step 3 rejects any key or recipient value whose meaning could change under a second decode or a different delimiter rule.
+   How the **remote** server decodes is outside the boundary; that is why step 3 rejects any key or recipient value whose meaning could change under a second decode or a different delimiter rule.
 
    **Matching grammar for `allow`.** Each entry is either an exact literal or a literal followed by a single trailing `*` (prefix match). A `*` anywhere else, character classes and regular expressions are rejected when the policy loads. Values are compared as exact strings after the single decode above (JSON string unescaping for body values); no case-folding, trimming or Unicode normalisation.
 
