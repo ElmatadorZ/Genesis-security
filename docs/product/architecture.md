@@ -83,7 +83,8 @@ The runtime is the final authority. Agents and brains *propose*; the runtime *de
 
 | Shape | When |
 |---|---|
-| **In-process library** (today) | Single-process agents, SkynetClaw, notebooks |
+| **In-process library** (today) | Single-process agents, SkynetClaw, notebooks. Protects against manipulated models, **not** compromised agent code (no memory isolation in one process) |
+| **Out-of-process runtime** (required for mode 02 cross-agent guarantees) | Runtime as a separate process/OS user holding credentials and the state store; agents request, the runtime records, signs and enforces (ADR-0009 §2) |
 | **Local sidecar / gateway** (Phase 2, optional) | Agents in other languages; MCP gateway between clients and servers |
 | **Central control plane + many runtimes** (Phase 3) | Organizations with fleets of agents |
 
