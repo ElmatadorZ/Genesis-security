@@ -5,7 +5,7 @@ Status: **proposed** (see [ADRs](../adr/)). Today's v1.0 code implements the Run
 ```mermaid
 flowchart TB
   subgraph CP[Control plane — Enterprise, Phase 3]
-    PM[Policy management<br/>signed policy bundles]
+    PM[Policy management<br/>authenticated or signed bundles]
     IDM[Identity & key management<br/>per-agent keys, rotation]
     GOV[Governance<br/>operator RBAC, approvals]
   end
@@ -31,7 +31,7 @@ flowchart TB
   AG -- every tool call, message, memory write --> PROV
   BR -. tighten only .-> GW
   GW -- allowed calls only --> TOOLS
-  PM -- signed policy --> POL
+  PM -- validated policy --> POL
   IDM -- public keys / secrets --> PROV
   LED --> OBS
 ```

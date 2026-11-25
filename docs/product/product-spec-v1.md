@@ -36,6 +36,21 @@ Autonomous agents read untrusted content and then act with real permissions. Mod
 | **Security / platform team** at an organization | Central policy, per-agent identity, evidence for auditors, SIEM feed, incident response |
 | **Auditor / buyer** | Mapping to recognised frameworks, reproducible test evidence, signed releases |
 
+## 2a. Threat model: who is trusted, who is the attacker
+
+| Actor | Trust | Can | Cannot (by design) |
+|---|---|---|---|
+| **Owner** (person who runs the deployment) | Trusted (T1) | Give tasks, approve HOLDs, author policy | — |
+| **Operator** (holds master/policy/audit keys, runs the host) | Trusted for Core; *separable* only with mode B signing and external anchoring | Change policy, rotate keys, release quarantine | Forge a mode-B policy without the author key; rewrite an externally anchored ledger undetected |
+| **Runtime host OS** | Trusted (outside our control) | — | — |
+| **Agents** (Genesis Mind, SkynetClaw, MCP clients, external agents) | **Untrusted principals** with identities and scopes | Propose tool calls and messages within their scopes | Declare capabilities, widen scopes, sign as another agent, approve their own HOLDs |
+| **Models / brains** | **Untrusted advisors** | Propose stricter verdicts | Loosen any verdict (ADR-0001) |
+| **Content authors** (web pages, files, emails, tool output, MCP results) | **Attacker** (T3) | Put text in front of agents | Authorize any action, grant tiers or scopes, change policy |
+| **Compromised agent** | **Attacker** holding one agent's key | Act within that agent's scopes until quarantined/revoked | Impersonate other agents (ADR-0005), act after revocation |
+| **Attacker with host or key access** | **Out of scope for Core guarantees** | Everything the operator can | Defeat mode-B policy signing or external anchors (see ADR-0004, ADR-0007) |
+
+Guarantees in this spec hold against the attackers above **only** for actions routed through the runtime. Tools reachable without the gateway are outside every guarantee.
+
 ## 3. Scope
 
 **In scope (Core, v1.x → v2.0):** policy-governed tool gating · trust tiers and taint · agent identity and signed messaging · memory and supply-chain guards · tamper-evident audit ledger · red-team and conformance suites · Python SDK and CLI · adapters for Claude, OpenAI, Gemini, Ollama and MCP.
@@ -68,12 +83,13 @@ Each requirement has an ID used by the backlog and by tests. **MUST** items gate
 ### Policy
 - **FR-POL-1 (MUST)** Policy is validated against a schema at load. Unknown keys, wrong types and missing required sections are load errors (strict mode default).
 - **FR-POL-2 (MUST)** A policy that fails to load leaves the gate in deny-all, never allow-all.
-- **FR-POL-3 (SHOULD)** Policies can be signed; the runtime verifies the signature before use.
+- **FR-POL-3 (SHOULD)** Policy integrity: HMAC *authentication* in Core (mode A) or asymmetric *signing* with the optional extra (mode B); the runtime verifies before use and never falls back silently (ADR-0004).
+- **FR-POL-5 (MUST)** Atomic reload; a failed reload keeps the current policy and never falls back to a more permissive one; every load, reload and failure is an audit event (ADR-0004).
 - **FR-POL-4 (SHOULD)** `genesis-security policy check` lints a policy and warns about risky grants (e.g. `node`, `find`, wildcard hosts).
 
 ### Identity
 - **FR-ID-1 (MUST)** Per-agent keys: a message signed by agent A cannot verify as agent B.
-- **FR-ID-2 (MUST)** Key strength enforced (≥ 32 random bytes); weak text keys refused.
+- **FR-ID-2 (MUST)** Only keys in the `keygen` format (256 bits from the OS CSPRNG, versioned prefix, checksum) are accepted; passwords and padded text are refused regardless of length. Length is not treated as proof of entropy (ADR-0005).
 - **FR-ID-3 (SHOULD)** Key rotation with an overlap window; revocation list.
 
 ### State
@@ -81,7 +97,7 @@ Each requirement has an ID used by the backlog and by tests. **MUST** items gate
 - **FR-ST-2 (MUST)** State shared safely by multiple processes on one host.
 
 ### Audit
-- **FR-AUD-1 (MUST)** Every verdict recorded before the action runs; if the record can't be written, the verdict is BLOCK with a defined error.
+- **FR-AUD-1 (MUST)** Every verdict committed before the action runs; no execution path exists without a committed record. Failure contract per API in ADR-0007 (`pre_tool_call` returns BLOCK; `@guard` raises `AuditUnavailableError`).
 - **FR-AUD-2 (MUST)** Keyed hash chain, checkpoints, truncation/deletion detection (exists).
 - **FR-AUD-3 (SHOULD)** Export in a SIEM-friendly schema (JSON lines with stable field names; CEF/OCSF mapping documented).
 
@@ -106,18 +122,20 @@ Each requirement has an ID used by the backlog and by tests. **MUST** items gate
 
 Core v2.0 ships only when all pass. Current status is in the [baseline audit](../audit/2026-11-25-baseline-audit.md#release-gate-status-from-the-product-spec).
 
-| Gate | Criterion | Evidence |
-|---|---|---|
-| G1 | 0 unauthorized tool executions across red-team + conformance suites, **default policy** | CI report |
-| G2 | 0 open Critical/High findings | Findings register |
-| G3 | Every failure scenario fails closed | Conformance suite |
-| G4 | Replay, forged identity, cross-agent signing resisted | Adversarial tests |
-| G5 | Audit edits, rewrite, truncation, deletion, rollback detected | Tests |
-| G6 | No regression across releases | CI on every PR |
-| G7 | Quickstart works on a clean machine, all three OSes | CI + manual |
-| G8 | Public API versioned; deprecation policy published | Docs |
-| G9 | Independent review completed; findings triaged | External report |
-| G10 | SBOM, signed tag, published hashes | Release assets |
+| Gate | Criterion | Evidence (must be linked in the release notes) | Owner of evidence | Approver |
+|---|---|---|---|---|
+| G1 | 0 unauthorized tool executions across red-team + conformance suites, **default policy** | CI JSON report for the release commit | Maintainer | Owner |
+| G2 | 0 open Critical/High findings | Findings register with status per ID ([traceability](../audit/2026-11-25-baseline-audit.md#traceability-finding--decision--work--test--gate)) | Maintainer | Owner |
+| G3 | Every failure scenario fails closed | Conformance suite report | Maintainer | Owner |
+| G4 | Replay, forged identity, cross-agent signing resisted | Adversarial test report | Maintainer | Internal independent reviewer (D3) |
+| G5 | Audit edit, rewrite, truncation, deletion, rollback detected; anchoring documented | Test report | Maintainer | Internal independent reviewer |
+| G6 | No regression across releases | CI history for every merged PR | CI | Owner |
+| G7 | Quickstart works on a clean machine, Linux/macOS/Windows | CI job + one manual run log | Maintainer | Owner |
+| G8 | Public API versioned; deprecation + security-compatibility policy published | `SECURITY.md`, ADR-0008, changelog | Maintainer | Owner |
+| G9 | Independent external review completed; every finding triaged | External report (or written "not independently reviewed") | External reviewer | Owner |
+| G10 | SBOM, signed tag, published hashes | Release assets | Maintainer | Owner |
+
+Until a second maintainer exists, "Maintainer" is the owner plus AI assistance; that is why G4, G5 and G9 require someone else's sign-off.
 
 ## 8. Standards alignment (mapping, not certification)
 
@@ -153,6 +171,7 @@ Genesis Security is designed to align with these frameworks. **Alignment is a se
 - "Certified", "compliant" or "OWASP-approved".
 - "Prevents prompt injection". We claim: injected content cannot authorize actions through the gate.
 - Any test result we haven't run and published.
+- That v1.x, or v2.x with compatibility mode enabled, provides secure enforcement. v1.x and compat mode are labelled `NOT SECURE ENFORCEMENT`; only v2.0 strict/default-deny is.
 
 ## 10. Decisions
 
@@ -162,5 +181,7 @@ Recorded in [Governance Decision v1.0](governance-decisions.md) (2026-11-25):
 2. **No security behind a paywall** — approved; the full list of what every edition must include is in D2.
 3. **External reviewer** — pending. Two layers: internal independent review + external security review. AI assistants are not counted as independent auditors.
 4. **Phase 1 code** — not yet approved; Phase 1 items may be prepared as issues.
+
+Review proposals R1–R4 (compat-mode opt-in, v3.0 removal, v1.x fix window, security-over-compatibility) await the owner — see [Governance](governance-decisions.md#proposed-additions-from-architecture-review-pending-owner-decision).
 
 Still open: **ACS overlap** (adopt, map to, or ignore the OWASP Agent Control Standard) — backlog P0-05.

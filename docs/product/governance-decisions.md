@@ -82,3 +82,15 @@ Tracked as GitHub Issues, in this order:
 5. P1-11 + red-team additions — Regression and adversarial tests
 
 Preparation = issue with design notes, acceptance criteria and test plan. Implementation starts when D5 changes to approved.
+
+## Proposed additions from architecture review (pending owner decision)
+
+Raised in the PR #1 review and written into ADR-0003 §6 / ADR-0008 §3 as **proposals**. They do not change D1 until the owner decides.
+
+| # | Proposal | Owner decision |
+|---|---|---|
+| R1 | Compatibility mode in v2.0 needs an explicit named setting **and** an environment acknowledgement; either missing → strict | Pending |
+| R2 | Compatibility mode removed in v3.0 | Pending |
+| R3 | v1.x security-fix window after v2.0 ships (proposed 6 months) | Pending |
+| R4 | Security fixes may change behaviour in minor/patch releases, always toward stricter, with advisory + migration notice | Pending |
+

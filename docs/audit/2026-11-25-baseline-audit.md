@@ -56,6 +56,29 @@ Severity: **Critical** = exploitable bypass in default configuration with irreve
 - Envelope checks (signature, nonce, freshness, recipient, scope, hop) are correct under concurrent load.
 - Zero runtime dependencies; small, readable codebase (1,353 lines).
 
+## Traceability: finding → decision → work → test → gate
+
+Every finding is closed only when its regression test exists, failed on the audited commit, and passes on the fix. Test names are planned; each will link to its CI run when it lands.
+
+| Finding | Sev. | Decision | Work item | Regression / adversarial test (planned) | Gate | Status |
+|---|---|---|---|---|---|---|
+| GS-AUD-01 default-allow | High | ADR-0003 §2 | P1-01 · [#4](https://github.com/ElmatadorZ/Genesis-security/issues/4) | `redteam.T1 undeclared tool → BLOCK`; probe `wire_money` | G1, G2 | Open |
+| GS-AUD-02 name-bound shell | High | ADR-0003 §3, §5 | P1-02 · [#5](https://github.com/ElmatadorZ/Genesis-security/issues/5), P1-16 | rename matrix (5 names); D1–D4 under non-`shell_exec` name; wrapper cases | G1, G2 | Open |
+| GS-AUD-03 partial policy fails open | High | ADR-0004 §1, §4 | P1-03 · [#2](https://github.com/ElmatadorZ/Genesis-security/issues/2), [#3](https://github.com/ElmatadorZ/Genesis-security/issues/3) | per-error-class load tests; deny-all conformance; probe "only `[egress]`" | G2, G3 | Open |
+| GS-AUD-04 policy integrity | Med | ADR-0004 §2–4 | P1-04 | one-byte edit → load fails; whitespace edit → same fp; downgrade refused | G2 | Open |
+| GS-AUD-05 state in memory | Med | ADR-0006 | P1-05 | quarantine survives restart; 2 proc × 32 threads replay → 1 ALLOW | G4 | Open |
+| GS-AUD-06 shared key | Med | ADR-0005 §2, §4 | P1-06 | A signed with B's key → BLOCK; revoked → BLOCK | G4 | Open |
+| GS-AUD-07 weak keys | Med | ADR-0005 §1 | P1-07 | 32-byte password refused; HKDF KATs | G4 | Open |
+| GS-AUD-08 project supply chain | Med | ADR-0008 §4 | P4-04, P4-05 | CI check: every `uses:` pinned by SHA; SBOM present | G10 | Open |
+| GS-AUD-09 caller-asserted provenance | Med | ADR-0003 §4 | P1-17 | turn with T3 record → actions T3; unverifiable record → T3 + event | G1 | Open |
+| GS-AUD-10 self-review only | Med | Governance D3 | P4-01 | external report | G9 | Open |
+| GS-AUD-11 raw ledger exception | Low | ADR-0007 §2 | P1-08 | per-API failure contract tests; no `OSError` escapes | G3, G5 | Open |
+| GS-AUD-12 GIL reliance | Low | ADR-0006 §3, §5 | P1-09, P1-05 | concurrency suite on 3.13t | G4 | Open |
+| GS-AUD-13 no stable API | Low | ADR-0008 | P2-02 | `__all__` snapshot test | G8 | Open |
+| GS-AUD-14 URL-centric egress | Low | ADR-0003 §3 (`message`) | P1-10 (with P1-02 · [#5](https://github.com/ElmatadorZ/Genesis-security/issues/5)) | email to unlisted domain → HOLD with domain | G1 | Open |
+| GS-AUD-15 L1 phrasing gaps | Info | Accepted | — | red-team A1–A6 L2 pairs stay PASS | G1 | Accepted |
+| GS-AUD-16 custom encodings to allowlisted host | Info | Accepted | — | red-team R6/R7 | — | Accepted |
+
 ## Release gate status (from the product spec)
 
 | Gate | Status |
