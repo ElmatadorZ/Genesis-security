@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "genesis-security"
-version = "1.0.0"
+version = "1.1.0.dev0"
 description = "Defensive runtime for AI agents and multi-agent systems: prompt-injection tripwires, trust tiers, tool gating, signed agent messages, tamper-evident audit."
 readme = "README.md"
 requires-python = ">=3.11"

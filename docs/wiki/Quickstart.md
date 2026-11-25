@@ -23,7 +23,7 @@ Twelve attacks go through the loop: a web page with hidden instructions, an agen
 genesis-security redteam
 ```
 
-45 attack cases. `PASS` means the attack was stopped. `MISS` lines are informational: the L1 scanner didn't recognise a rephrased injection, and the matching `-L2` line shows the action was still blocked. The exit code is the number of real failures. It should be 0.
+49 attack cases. `PASS` means the attack was stopped. `MISS` lines are informational: the L1 scanner didn't recognise a rephrased injection, and the matching `-L2` line shows the action was still blocked. The exit code is the number of real failures. It should be 0.
 
 ## 3. Guard a tool
 

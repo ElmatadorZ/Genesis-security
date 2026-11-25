@@ -56,6 +56,16 @@ def self_raises():
     raise AssertionError("PolicyError not raised")
 
 
+def setUpModule():
+    import logging
+    logging.getLogger("genesis_security").setLevel(logging.CRITICAL)  # expected deny-all errors
+
+
+def tearDownModule():
+    import logging
+    logging.getLogger("genesis_security").setLevel(logging.NOTSET)
+
+
 class SchemaValidationTests(unittest.TestCase):
     def test_default_policy_is_valid(self):
         Policy.default()
@@ -119,6 +129,12 @@ class SchemaValidationTests(unittest.TestCase):
 
 
 class FailClosedLoadingTests(unittest.TestCase):
+    def test_load_failure_is_logged_loudly(self):
+        with self.assertLogs("genesis_security", level="ERROR") as cm:
+            GenesisSecurityGate(os.urandom(32), policy_path=write("[egress"),
+                                audit=AuditTrail(Path(tempfile.mkdtemp()) / "x.jsonl"))
+        self.assertIn("deny-all", "\n".join(cm.output))
+
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp())
         self.audit = AuditTrail(self.dir / "a.jsonl")

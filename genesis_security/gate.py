@@ -14,6 +14,7 @@ import binascii
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import secrets
@@ -24,7 +25,7 @@ from typing import Any, Callable, Iterator, Optional
 from urllib.parse import unquote, urlsplit
 
 from .audit import AuditTrail, derive_audit_key
-from .policy import Policy
+from .policy import Policy, PolicyError
 from .scanner import scan_injection
 from .tiers import Tainted, Tier, Verdict
 
@@ -43,19 +44,44 @@ RULE_LIKE = re.compile(
     r"|ต้อง|ห้าม|จากนี้ไป|ต่อไปนี้|ให้เชื่อ|เชื่อฟัง|ถือว่า")
 UNTRUSTED_TAG = re.compile(r"(?i)<\s*(/?)\s*untrusted")
 MAX_DECODE_TOKENS = 256
+log = logging.getLogger("genesis_security")
+DENY_ALL_REASON = "policy failed to load: deny-all (no action is permitted until a valid policy is loaded)"
 
 
 class GenesisSecurityGate:
     def __init__(self, hmac_key: bytes, policy: Policy | None = None,
                  audit: AuditTrail | None = None, brain: Brain | None = None,
-                 owner_confirm: OwnerConfirm | None = None):
+                 owner_confirm: OwnerConfirm | None = None,
+                 policy_path: "str | os.PathLike[str] | None" = None):
+        """Create a gate.
+
+        ``policy_path`` loads and validates a policy file. If it cannot be loaded, the gate
+        does not raise: it enters **deny-all** (ADR-0004 §4) — every action is blocked and
+        ``status()["policy_ok"]`` is False — and records one ``policy_load_failed`` audit event.
+        """
         if len(hmac_key) < 16:
             raise ValueError("hmac_key must be at least 16 bytes")
+        if policy is not None and policy_path is not None:
+            raise ValueError("pass either policy or policy_path, not both")
         self.key = hmac_key
-        self.policy = policy or Policy.default()
         self.audit = audit or AuditTrail()
         if self.audit.key is None:                 # key the audit chain (GSX-13)
             self.audit.key = derive_audit_key(hmac_key)
+        self.policy_error: PolicyError | None = None
+        if policy_path is not None:
+            try:
+                policy = Policy.load(policy_path)
+            except PolicyError as e:
+                self.policy_error = e
+        if self.policy_error is not None:
+            # Packaged default kept ONLY so secrets are still redacted in logs; it authorizes nothing.
+            self.policy = Policy.default()
+            log.error("Genesis Security: %s. Errors: %s", DENY_ALL_REASON, "; ".join(self.policy_error.errors))
+            self.audit.record("policy_load_failed", {"source": self.policy_error.path,
+                                                     "errors": self.policy_error.errors[:50],
+                                                     "mode": "deny-all"})
+        else:
+            self.policy = policy or Policy.default()
         self.brain = brain
         self.owner_confirm = owner_confirm
         self.strikes: dict[str, int] = {}
@@ -67,11 +93,30 @@ class GenesisSecurityGate:
     def from_env(cls, **kw: Any) -> "GenesisSecurityGate":
         """Build a gate with the HMAC key from $GENESIS_SECURITY_KEY (hex or text)."""
         key = key_from_env()
-        if "policy" not in kw and os.environ.get("GENESIS_SECURITY_POLICY"):
-            kw["policy"] = Policy.load(os.environ["GENESIS_SECURITY_POLICY"])
+        if "policy" not in kw and "policy_path" not in kw and os.environ.get("GENESIS_SECURITY_POLICY"):
+            kw["policy_path"] = os.environ["GENESIS_SECURITY_POLICY"]
         if "audit" not in kw and os.environ.get("GENESIS_SECURITY_AUDIT"):
             kw["audit"] = AuditTrail(os.environ["GENESIS_SECURITY_AUDIT"])
         return cls(key, **kw)
+
+    # ───────── status / deny-all ─────────
+    @property
+    def policy_ok(self) -> bool:
+        return self.policy_error is None
+
+    def status(self) -> dict:
+        """Small health summary for `doctor`, dashboards and tests."""
+        return {"policy_ok": self.policy_ok,
+                "policy_error": str(self.policy_error) if self.policy_error else None,
+                "policy_source": None if self.policy_error else self.policy.source,
+                "policy_version": None if self.policy_error else self.policy.policy_version,
+                "mode": "enforcing" if self.policy_ok else "deny-all",
+                "quarantined": sorted(self.quarantined)}
+
+    def _deny_all(self, event: str, ctx: dict) -> Verdict:
+        v = Verdict("BLOCK", ["POLICY"], "S2", DENY_ALL_REASON, layer_trace=["L0:policy-load-failed"])
+        self.audit.record(event, {"verdict": asdict(v), "ctx": _safe_ctx(ctx)})
+        return v
 
     # ───────── helpers ─────────
     def sign(self, body: str) -> str:
@@ -127,6 +172,15 @@ class GenesisSecurityGate:
     def on_external_content(self, source: str, content: str, task_id: str = "-") -> tuple[Tainted, Verdict]:
         """Every T3 payload is returned wrapped and escaped so it can't close its own wrapper."""
         status, gsx, hits = scan_injection(content)
+        if not self.policy_ok:                     # content is data; still wrapped, still T3
+            self.task_taint[task_id] = Tier.T3
+            safe = UNTRUSTED_TAG.sub(lambda m: "&lt;" + m.group(1) + "untrusted", content)
+            wrapped = f"<untrusted source={json.dumps(source)} scan='{status}'>\n{safe}\n</untrusted>"
+            v = Verdict("ALLOW_SANITIZED", gsx, "S2", f"{DENY_ALL_REASON}; content wrapped as T3 data only",
+                        layer_trace=["L0:policy-load-failed", "L0:T3", f"L1:{status}"])
+            self.audit.record("external_content", {"verdict": asdict(v),
+                                                   "ctx": {"source": source[:200], "task_id": task_id}})
+            return Tainted(wrapped, Tier.T3, source), v
         self.task_taint[task_id] = Tier.T3
         v = Verdict("ALLOW" if status != "injected" else "ALLOW_SANITIZED", gsx,
                     "S3" if status == "injected" else "S4",
@@ -138,6 +192,8 @@ class GenesisSecurityGate:
 
     # ───────── Hook 2: before every tool call ─────────
     def pre_tool_call(self, tool: str, args: dict, ctx: dict) -> Verdict:
+        if not self.policy_ok:
+            return self._deny_all("tool_call", {"tool": tool, **ctx})
         trace: list[str] = []
         gsx: list[str] = []
         origin = Tier(ctx.get("origin_tier", Tier.T3))
@@ -229,6 +285,8 @@ class GenesisSecurityGate:
 
     def on_agent_message(self, envelope: dict | None, body: str, granted_scope: set[str],
                          recipient: Optional[str] = None) -> tuple[Tier, Verdict]:
+        if not self.policy_ok:
+            return Tier.T3, self._deny_all("agent_message", {"agent": str((envelope or {}).get("from"))})
         if not envelope or "sig" not in envelope:
             v = Verdict("ALLOW_SANITIZED", ["GSX-07"], "S3", "no envelope: treated as T3 data",
                         layer_trace=["L0:no-envelope→T3"])
@@ -278,6 +336,8 @@ class GenesisSecurityGate:
 
     # ───────── Hook 4: memory / genome write ─────────
     def on_memory_write(self, path: str, content: str, src_tier: Tier) -> Verdict:
+        if not self.policy_ok:
+            return self._deny_all("memory_write", {"path": path})
         trace = [f"L0:src={Tier(src_tier).name}"]
         c = {"path": path}
         if self._has_secret(content):
@@ -302,6 +362,8 @@ class GenesisSecurityGate:
 
     # ───────── Hook 5: skill / plugin load ─────────
     def on_skill_load(self, path: str, content: str, pinned_sha256: Optional[str]) -> Verdict:
+        if not self.policy_ok:
+            return self._deny_all("skill_load", {"path": path})
         h = hashlib.sha256(content.encode("utf-8")).hexdigest()
         c = {"path": path, "sha256": h}
         if pinned_sha256 and not hmac.compare_digest(h, pinned_sha256):

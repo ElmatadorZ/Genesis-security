@@ -81,8 +81,14 @@ class PolicyEnvCliTests(unittest.TestCase):
 
     def test_custom_policy(self):
         f = Path(tempfile.mkdtemp()) / "p.toml"
-        f.write_text('[agents]\nhop_budget = 2\n')
+        default = (Path(__file__).resolve().parent.parent / "genesis_security" / "default_policy.toml").read_text()
+        f.write_text(default.replace("hop_budget = 5", "hop_budget = 2"))
         self.assertEqual(Policy.load(f).hop_budget, 2)
+        # v1.1: a policy with only [agents] no longer loads (GS-AUD-03, security behaviour change)
+        f.write_text('[agents]\nhop_budget = 2\n')
+        from genesis_security import PolicyError
+        with self.assertRaises(PolicyError):
+            Policy.load(f)
 
     def test_from_env(self):
         os.environ["GENESIS_SECURITY_KEY"] = "ab" * 32

@@ -3,7 +3,7 @@
 [![CI](https://github.com/ElmatadorZ/Genesis-security/actions/workflows/ci.yml/badge.svg)](https://github.com/ElmatadorZ/Genesis-security/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
-![Red team](https://img.shields.io/badge/red%20team-45%20cases%2C%200%20failures-brightgreen)
+![Red team](https://img.shields.io/badge/red%20team-49%20cases%2C%200%20failures-brightgreen)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 **A defensive runtime for AI agents and multi-agent systems.**
@@ -65,7 +65,7 @@ pip install .
 # 1. See the loop stop 12 attacks
 genesis-security demo
 
-# 2. Attack your own install with 45 red-team cases (exit code = failures)
+# 2. Attack your own install with 49 red-team cases (exit code = failures)
 genesis-security redteam
 
 # 3. Create the secret the gate uses to sign agent messages and the audit log
@@ -286,6 +286,7 @@ genesis-security verify-audit logs/audit.jsonl --checkpoint cp.json
 
 ```bash
 genesis-security policy > my_policy.toml
+genesis-security policy check my_policy.toml   # validate before use; lists every problem
 export GENESIS_SECURITY_POLICY=my_policy.toml
 ```
 
@@ -318,13 +319,14 @@ patterns = ['sk-[A-Za-z0-9_-]{16,}', '-----BEGIN [A-Z ]*PRIVATE KEY-----', ...]
 | Command | Does |
 |---|---|
 | `genesis-security demo` | 12 attack scenarios + an audit tamper check |
-| `genesis-security redteam` | 45 attack cases against your install; exit code = failures |
+| `genesis-security redteam` | 49 attack cases against your install; exit code = failures |
 | `genesis-security scan FILE... \| -` | injection scan; exit 0 clean, 1 suspicious, 2 injected |
 | `genesis-security keygen` | new `GENESIS_SECURITY_KEY` |
 | `genesis-security checkpoint LOG` | print `{count, head}` for the audit chain |
 | `genesis-security verify-audit LOG [--checkpoint cp.json]` | verify the chain |
 | `genesis-security pin FILE...` | SHA-256 pins for skills, plugins, tool descriptions |
 | `genesis-security policy` | print the default policy |
+| `genesis-security policy check FILE...` | validate policy files; exit 1 and list every problem if any is invalid |
 
 ---
 
@@ -446,7 +448,8 @@ Ideas for future versions. Contributions welcome.
 
 **Usability**
 - [ ] `async` versions of all hooks for asyncio agent loops
-- [ ] Policy hot-reload and `genesis-security policy check` (lint a policy file)
+- [x] `genesis-security policy check` (strict validation, v1.1)
+- [ ] Policy hot-reload
 - [ ] Ready-made `owner_confirm` adapters (Telegram, LINE, ntfy, desktop notification)
 - [ ] Audit viewer: a small local HTML report of verdicts, strikes and quarantines
 - [ ] PyPI release
@@ -483,7 +486,7 @@ genesis_security/
 ├── default_policy.toml
 ├── gate.py               GenesisSecurityGate: L2–L5, five hooks, @guard
 ├── audit.py              HMAC chain, file lock, rotation, checkpoints
-├── redteam.py            45-case red-team suite
+├── redteam.py            49-case red-team suite
 ├── demo.py               12-scenario demo
 └── cli.py                genesis-security command
 skill/SKILL.md            Brain: Cognitive OS for Claude

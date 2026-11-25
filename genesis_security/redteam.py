@@ -357,7 +357,51 @@ def _r7():
     return not_allowed(v), v.verdict
 
 
+# ───────────── P. Policy integrity (GS-AUD-03, v1.1) ─────────────
+def _policy_file(text: str) -> Path:
+    f = Path(tempfile.mkdtemp(prefix="rt-pol-")) / "policy.toml"
+    f.write_text(text, encoding="utf-8")
+    return f
+
+
+@case("P1", "Partial policy (only [egress]) cannot make delete_file('/') ALLOW")
+def _p1():
+    g = gate(policy_path=_policy_file('[egress]\nallowlist=["evil.example"]\ntools=["http_request"]\n'))
+    v = g.pre_tool_call("delete_file", {"path": "/"}, OWNER)
+    return v.verdict == "BLOCK" and not g.status()["policy_ok"], f"{v.verdict}/{g.status()['mode']}"
+
+
+@case("P2", "Typo'd section name ([tool]) puts the gate in deny-all")
+def _p2():
+    from importlib import resources
+    text = resources.files("genesis_security").joinpath("default_policy.toml").read_text("utf-8")
+    g = gate(policy_path=_policy_file(text.replace("[tools]", "[tool]")))
+    v = g.pre_tool_call("read_file", {"path": "a"}, OWNER)
+    return v.verdict == "BLOCK", f"{v.verdict}/{g.status()['mode']}"
+
+
+@case("P3", "Deny-all blocks every hook, not just tool calls")
+def _p3():
+    g = gate(policy_path=_policy_file("not = [valid"))
+    env = g.make_envelope("a", "b", "t", "x", ["s"])
+    out = [g.on_agent_message(env, "x", {"s"}, recipient="b")[1].verdict,
+           g.on_memory_write("/m", "fact", Tier.T1).verdict,
+           g.on_skill_load("s.md", "x", hashlib.sha256(b"x").hexdigest()).verdict]
+    return all(x == "BLOCK" for x in out), "/".join(out)
+
+
+@case("P4", "Policy that widens egress with a wildcard host is refused")
+def _p4():
+    from importlib import resources
+    text = resources.files("genesis_security").joinpath("default_policy.toml").read_text("utf-8")
+    g = gate(policy_path=_policy_file(text.replace('"localhost"', '"*"')))
+    v = g.pre_tool_call("http_request", {"url": "https://evil.example"}, OWNER)
+    return v.verdict == "BLOCK" and not g.status()["policy_ok"], v.verdict
+
+
 def main() -> int:
+    import logging
+    logging.getLogger("genesis_security").setLevel(logging.CRITICAL)  # deny-all errors are expected here
     fails = 0
     print(f"{'ID':<9}{'RESULT':<8}{'DETAIL':<22}ATTACK")
     print("-" * 78)

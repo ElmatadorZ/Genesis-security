@@ -61,9 +61,30 @@ def _cmd_pin(a: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_policy(_: argparse.Namespace) -> int:
-    sys.stdout.write(resources.files("genesis_security").joinpath("default_policy.toml").read_text("utf-8"))
-    return 0
+def _cmd_policy(a: argparse.Namespace) -> int:
+    from .policy import Policy, PolicyError
+    if a.action is None:
+        sys.stdout.write(resources.files("genesis_security").joinpath("default_policy.toml").read_text("utf-8"))
+        return 0
+    if a.action != "check":
+        print(f"unknown policy action {a.action!r}; use: genesis-security policy [check FILE ...]", file=sys.stderr)
+        return 2
+    if not a.files:
+        print("policy check: give at least one policy file", file=sys.stderr)
+        return 2
+    worst = 0
+    for f in a.files:
+        try:
+            p = Policy.load(f)
+        except PolicyError as e:
+            worst = 1
+            print(f"INVALID  {f}  ({len(e.errors)} problem{'s' if len(e.errors) != 1 else ''})")
+            for err in e.errors:
+                print(f"  - {err}")
+            continue
+        print(f"OK       {f}  (version {p.policy_version or 'unset'}; "
+              f"{len(p.irreversible_tools)} irreversible tools, {len(p.egress_allowlist)} allowed hosts)")
+    return worst
 
 
 def _utf8_console() -> None:
@@ -93,7 +114,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("keygen", help="print a new GENESIS_SECURITY_KEY").set_defaults(fn=_cmd_keygen)
     p = sub.add_parser("pin", help="print sha256 pins for skill/plugin files")
     p.add_argument("files", nargs="+"); p.set_defaults(fn=_cmd_pin)
-    sub.add_parser("policy", help="print the default policy TOML").set_defaults(fn=_cmd_policy)
+    pol = sub.add_parser("policy", help="print the default policy, or `policy check FILE...` to validate")
+    pol.add_argument("action", nargs="?", choices=["check"], help="check: validate policy files")
+    pol.add_argument("files", nargs="*")
+    pol.set_defaults(fn=_cmd_policy)
     sub.add_parser("redteam", help="run the red-team suite (exit code = failures)").set_defaults(
         fn=lambda a: __import__("genesis_security.redteam", fromlist=["main"]).main())
     a = ap.parse_args(argv)

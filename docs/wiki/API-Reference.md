@@ -23,10 +23,15 @@ GenesisSecurityGate(hmac_key: bytes, policy: Policy | None = None, audit: AuditT
 | `audit` | `AuditTrail("genesis_security_audit.jsonl")` | If the trail has no key, the gate sets the derived audit key |
 | `brain` | `None` | See [Brain Adapters](Brain-Adapters) |
 | `owner_confirm` | `None` | Called for HOLD verdicts. See [Verdicts and the Human Gate](Verdicts-and-the-Human-Gate) |
+| `policy_path` | `None` | Load and validate a policy file. On any error the gate enters **deny-all** instead of raising (since v1.1). Mutually exclusive with `policy` |
+
+### `status() -> dict` · `policy_ok` (since v1.1)
+
+`{"policy_ok", "policy_error", "policy_source", "policy_version", "mode", "quarantined"}`. `mode` is `"enforcing"` or `"deny-all"`.
 
 ### `GenesisSecurityGate.from_env(**kw)`
 
-Reads `GENESIS_SECURITY_KEY` (hex, or raw text if not hex), and optionally `GENESIS_SECURITY_POLICY` and `GENESIS_SECURITY_AUDIT`. Keyword arguments override them. Raises `RuntimeError` if the key is missing.
+Reads `GENESIS_SECURITY_KEY` (hex, or raw text if not hex), and optionally `GENESIS_SECURITY_POLICY` (loaded as `policy_path`, so a broken file means deny-all) and `GENESIS_SECURITY_AUDIT`. Keyword arguments override them. Raises `RuntimeError` if the key is missing.
 
 ### `on_external_content(source: str, content: str, task_id: str = "-") -> tuple[Tainted, Verdict]`
 
@@ -113,7 +118,9 @@ Dataclass with the fields described in [Policy Reference](Policy-Reference).
 |---|---|
 | `Policy.load(path=None)` | Load a TOML file, or the packaged default when `path` is `None` |
 | `Policy.default()` | Same as `load()` |
-| `Policy.from_dict(d)` | Build from a parsed TOML dict |
+| `Policy.from_dict(d)` | Validate and build from a parsed TOML dict |
+
+`PolicyError(ValueError)` — raised by `load` / `from_dict`; `.errors` lists every problem, `.path` the file (since v1.1). `genesis_security.policy.validate(d) -> list[str]` returns the problems without raising.
 
 ---
 
