@@ -1,6 +1,6 @@
 # Architecture — target for Core v2.0
 
-Status: **proposed** (see [ADRs](../adr/)). Today's code implements the Runtime box except the parts marked *new*. Revised 2026-11-25 after architecture review round 2: three enforcement modes on one core; MCP as an adapter of the Execution Gateway; information-flow state (ADR-0009); identity/credential split (ADR-0005).
+Status: **proposed** (see [ADRs](../adr/)). Today's code implements the Runtime box except the parts marked *new*. Revised 2026-11-25 after architecture review round 2 (three enforcement modes on one core; MCP as an adapter of the Execution Gateway; information-flow state, ADR-0009; identity/credential split, ADR-0005), and aligned with the Batch 1 architecture baseline (PR #8, Rev7 accepted).
 
 ```mermaid
 flowchart TB
@@ -17,7 +17,7 @@ flowchart TB
     DET[Threat detection<br/>L1 tripwire, secrets, egress]
     GW[Execution gateway<br/>tool / MCP / API guard, Human Gate]
     FLOW[Flow state — new<br/>session data classes,<br/>readers, declassification]
-    ST[(State store — new<br/>SQLite: nonces, strikes,<br/>quarantine, flow state)]
+    ST[(State store — new, authoritative<br/>SQLite: nonces, strikes, quarantine,<br/>flow state, permits, grants,<br/>policy versions, epochs)]
     LED[(Audit ledger<br/>HMAC chain, checkpoints)]
     PROV --> POL --> DET --> FLOW --> GW
     POL -.reads.-> ST
@@ -52,6 +52,21 @@ Rules: one codebase; a mode is a configuration of the same engine, never a fork.
 
 Plan-Constrained Execution is not called control-flow integrity (CFI) until its properties are proven; human approval of a plan plus an LLM choosing steps is not CFI. It is also not market-risk control: trading deployments still need position and exposure limits, a kill switch and broker-side risk controls.
 
+## Egress path in mode 02 (ADR-0009 §4–§5)
+
+```
+agent request ─► sink resolution (canonical URL / structured fields, verification level, recipients, closed arguments)
+              ─► freeze: one immutable request buffer, SHA-256 digest
+              ─► authorize (BEGIN IMMEDIATE): effective readers at state version v → permit + ledger
+              ─► revalidate & consume (BEGIN IMMEDIATE): re-evaluate if version changed; single use
+              ─► verify digest, write the same buffer to TLS (CONNECT to verified IP if proxied)
+              ─► record outcome (sent / failed / unknown) with issued / revalidated / consumed versions
+```
+
+## Dependency chain
+
+Identity & credentials (ADR-0005) → trusted runtime & authoritative state store (ADR-0006, ADR-0009 §2) → information-flow engine (ADR-0009 §1, §3, §7, §8, §10) → sink resolution & Execution Gateway (ADR-0009 §4–§6, ADR-0003) → authenticated & authorized execution → auditable decision (ADR-0007). Each stage relies only on the stages before it; none may be implemented on assumptions about a later one.
+
 ## Authority rule
 
 The runtime is the final authority. Agents and brains *propose*; the runtime *decides*. No path exists from model output to a looser verdict, a new scope, a new tier or a policy change (ADR-0001).
@@ -62,7 +77,7 @@ The runtime is the final authority. Agents and brains *propose*; the runtime *de
 2. **Policy.** Look up the tool. Not declared → BLOCK (default deny). Load capabilities and scopes; check the agent's role allows it.
 3. **Detection.** L1 scan of arguments; secret detection on decoded views; destination checks for every network/message capability.
 4. **Capability rules.** `exec` → shell rules; `network`/`message` → allowlists; `delete`/`money`/irreversible → Human Gate.
-4a. **Flow (mode 02+).** If the session has read private data classes, the destination must be one of their readers (ADR-0009); else BLOCK.
+4a. **Flow (mode 02+).** Resolve the destination to a verified sink (ADR-0009 §5). If the session holds private classes, the sink must be in `effective_readers(session)` = ⋂ over classes of (policy readers ∪ per-class grants) (§1); else BLOCK. On ALLOW the egress follows the permit path below.
 4b. **Plan (mode 03).** The call must match the next allowed step of the approved plan; else HOLD/BLOCK.
 5. **Brain (optional).** May tighten.
 6. **Ledger.** Record the verdict. If recording fails → BLOCK.
@@ -75,7 +90,9 @@ The runtime is the final authority. Agents and brains *propose*; the runtime *de
 | Runtime ↔ host OS | Runtime trusts the OS; OS isolation (containers, users, network rules) is the integrator's job |
 | Runtime ↔ policy | Policy is trusted **only if** it validates (and, when signing is on, verifies) |
 | Runtime ↔ agents | Agents are untrusted principals with URI identities, credentials and scopes |
-| Enforcement boundary | Guarantees cover only actions and egress that pass through the Execution Gateway; deployments must route all agent egress through it (ADR-0009 §8) |
+| Enforcement boundary | Guarantees cover only actions and egress that pass through the Execution Gateway; deployments must route all agent egress through it (ADR-0009 §9) |
+| Runtime ↔ state store | The store is authoritative and writable only by the runtimes of one deployment; agents cannot reach it. Its integrity is a precondition, not something the runtime can prove (ADR-0005 §7, ADR-0009 §2) |
+| Gateway ↔ remote server | The gateway controls the bytes, the address and the verified identity; the remote server's own parsing and onward sharing are outside the boundary (ADR-0009 §5) |
 | Runtime ↔ brain | Brain is an untrusted advisor that can only tighten |
 | Runtime ↔ ledger readers | Readers can verify integrity with the key; they cannot forge entries without it |
 

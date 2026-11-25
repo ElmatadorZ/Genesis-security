@@ -104,3 +104,15 @@ Raised in the PR #1 review and written into ADR-0003 §6 / ADR-0008 §3. **Appro
 | Phase 1 — v2.0 core implementation | **Not approved** |
 | Owner-only declassification; undeclared data = private; action-selection leakage as residual risk | **Agreed** |
 
+
+## PR #8 Batch 1 — architecture review result (2026-11-25)
+
+| Item | Status |
+|---|---|
+| Batch 1 (ADR-0005, ADR-0009) architecture / documentation review | **Passed** at Rev7 (commit `556224e`), after review rounds Rev1–Rev7. Scope: design-level findings on the diffs presented; not an independent security audit, source review or CI verification |
+| Baseline | Frozen as the **Batch 1 architecture baseline**. Later changes to ADR-0005/0009 must be listed as errata or new review items |
+| Errata after acceptance | **E1** — ADR-0009 used `GSX-08` (catalogue: memory/genome poisoning) as a policy-drift event code; replaced by ledger events `flow.policy_drift`, `flow.policy_stale`, `flow.policy_mismatch`. **E2** — ADR-0009 §6 step 3 still referred to `confidentiality.readers`; now `effective_readers(session)` per §1. Both to be confirmed in Batch 2 review |
+| Merge of PR #8 | **Not approved** |
+| Implementation (v2.0 Phase 1) | **Not approved** |
+| ADR status | All remain **Proposed** |
+| Next | Batch 2 rebuilt from the baseline with an ADR-to-backlog traceability matrix; Batch 3 only after Batch 2 passes |

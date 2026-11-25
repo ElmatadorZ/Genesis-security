@@ -237,7 +237,7 @@ For every call with a `network` or `message` capability:
 
 1. Resolve the destination to a sink (§5) or principal. Unresolvable → **BLOCK**.
 2. If the session's confidentiality axis is empty → normal Gate rules.
-3. Otherwise the resolved reader must be in `confidentiality.readers` → else **BLOCK** (`GSX-06`; reason names class and sink). Not HOLD: readers are widened by policy or declassification, never by approving one leak.
+3. Otherwise the resolved reader must be in `effective_readers(session)` (§1 formula) → else **BLOCK** (`GSX-06`; reason names class and sink). Not HOLD: readers are widened by policy or declassification, never by approving one leak.
 4. Content is **not** inspected for this decision: rot13, base64, unicode transformations or paraphrase change nothing.
 
 ### 7. Combining across classes
@@ -282,9 +282,9 @@ Comparison never imports the sender's rules: the receiver always computes reader
 | Envelope `(policy_version, policy_fp)` vs receiver | Meaning | Action |
 |---|---|---|
 | = current version **and** = current fp | Same rules | Accept class names as-is |
-| = previous version **and** = previous fp | Policy changed while the message was in flight | Compatibility check: map classes by name; unknown → `private:unclassified`; log `GSX-08 policy drift` |
-| Version older than previous | Stale or replayed | Owner-only, T3, `GSX-08` |
-| Same version as current or previous, **different** fp | Inconsistent (forged or corrupted policy state) | Owner-only, T3, `GSX-08` (alert) |
+| = previous version **and** = previous fp | Policy changed while the message was in flight | Compatibility check: map classes by name; unknown → `private:unclassified`; ledger event `flow.policy_drift` |
+| Version older than previous | Stale or replayed | Owner-only, T3, ledger event `flow.policy_stale` |
+| Same version as current or previous, **different** fp | Inconsistent (forged or corrupted policy state) | Owner-only, T3, ledger event `flow.policy_mismatch` (alert) |
 | Version newer than current | Receiver has not installed it | Owner-only, T3 until the owner installs that policy; the envelope never installs or selects a policy |
 | Any other combination / unknown fp | Unknown policy state | Owner-only, T3 |
 
