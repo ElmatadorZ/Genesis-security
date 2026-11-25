@@ -90,3 +90,11 @@ Reviewer's agreement that B1 needs the out-of-process precondition, and that the
 | B4.2-A scope | Two input forms: structured fields (schema validation, CR/LF/control rejected, gateway encodes; e-mail allowed) vs ready-made strings (authority rules + strict steps 1–5); four-case table | ADR-0009 §5.9 |
 | B4.2-B dot segments | `.`/`..` rejected however written (literal, encoded, mixed), checked on the decoded segment; empty segments rejected | ADR-0009 §5.9 step 3 |
 | B4.2-C absolute URLs | Absolute `https://` only; authority rules (no userinfo, `\`, whitespace, `%`, non-ASCII); host = sink host, IP literals in any notation rejected unless declared, no trailing dot; strict port; no fragment; connection target always comes from the sink, never from the string | ADR-0009 §5.9 |
+
+## Round 6 (2026-11-25) — B4.2-A, B4.2-B accepted; B4.2-C small changes
+
+| Item | Resolution | Where |
+|---|---|---|
+| C1 authority scope | Table row corrected: absolute URL → authority validation → strict parsing; query string and form body → strict parsing only | ADR-0009 §5.9 |
+| C2 hostname vs IP | Host classified first (bracketed → IPv6; numeric last label or `0x` label → IPv4 class; else hostname). IPv4: only four decimal octets without leading zeros; IPv6: only RFC 5952 canonical text, no embedded IPv4 or zone ID; declared literal required in the same form; hostname and IP sinks never cross-match; unique spellings make string equality sufficient | ADR-0009 §5.9 |
+| Implementation note | Trailing-slash and path-normalisation tests added to P1-20 | backlog |

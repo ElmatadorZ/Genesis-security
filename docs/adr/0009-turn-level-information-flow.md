@@ -187,7 +187,7 @@ Resolution rules:
    | Input form | Rules | Example |
    |---|---|---|
    | **Structured fields** — path parameters, a query map, a header list, a body object, form fields, metadata, passed as typed values | Validated against the sink's **argument schema** per field (type, length, allowed characters); CR, LF, NUL and other control characters are rejected in every field; recipient fields are then matched against `allow`. The strict parsing steps below do **not** apply; the gateway encodes the values itself, once, when it builds the buffer (§4 step 1) | `to = "user@example.com"` in metadata → allowed if the schema and `allow` permit it |
-   | **Ready-made strings** — an absolute URL, a query string or a form body supplied as text | Absolute-URL authority rules, then strict parsing steps 1–5 below | `https://api.bank.example/v1/transfers/?to=user@example.com` → **BLOCK** (`@` in a recipient value, step 3) |
+   | **Ready-made strings** — an absolute URL, a query string or a form body supplied as text | Absolute URL: authority validation → strict parsing steps 1–5. Query string: strict parsing only. Form body: strict parsing only. Authority validation applies **only** to absolute URLs | `https://api.bank.example/v1/transfers/?to=user@example.com` → **BLOCK** (`@` in a recipient value, step 3) |
 
    | Case | Result |
    |---|---|
@@ -198,11 +198,19 @@ Resolution rules:
 
    After the gateway has encoded a value, no component inside the boundary decodes or interprets it again.
 
-   **Absolute-URL authority rules** (ready-made URLs only; applied before steps 1–5, on the raw string, consistent with §5 rules 2–8):
+   **Absolute-URL authority rules** (absolute URLs only — never to a standalone query string or form body; applied before steps 1–5, on the raw string, consistent with §5 rules 2–8):
 
    - The URL must be **absolute** and start with exactly `https://` (lowercase); any other scheme, a scheme-relative (`//host`) or relative URL → BLOCK.
    - Authority = the text between `https://` and the first `/`, `?` or `#`. **Reject** if it contains `@` (userinfo), `\`, whitespace, control or non-ASCII characters, or `%`.
-   - Host must be an ASCII hostname that **equals the sink's `host`** after ASCII lower-casing; reject a trailing dot, empty labels, IP literals (IPv4 in any form, including decimal, octal or hex, and `[IPv6]`) unless the sink declares that exact literal, and any host that differs from the sink's host.
+   - **Classify the host first**, then compare by type:
+
+     | Host form | Classified as | Rule |
+     |---|---|---|
+     | Enclosed in `[ ]` | IPv6 literal | Rejected unless the sink declares an IPv6 literal. The input must be in the **RFC 5952 canonical text form** (lowercase hex, no leading zeros, `::` for the longest run of two or more zero groups, leftmost on a tie, no embedded IPv4 notation, no zone ID such as `%25eth0`); any other spelling → BLOCK, even if it denotes the same address. It must then equal the declared literal, which the policy loader also requires to be in RFC 5952 form |
+     | Last label begins with a digit, or any label begins with `0x` | IPv4 literal (or an attempt at one) | Rejected unless the sink declares an IPv4 literal. The **only** accepted form is four dot-separated decimal octets, each `0`–`255`, with no leading zeros (`10.0.0.1`, never `010.0.0.1`, `0x0a.0.0.1`, `167772161` or `10.1`). Anything else in this class → BLOCK. It must then equal the declared literal exactly |
+     | Otherwise | DNS hostname | Labels of `[a-z0-9-]` after ASCII lower-casing, no trailing dot, no empty label; must **equal the sink's declared hostname** exactly |
+
+     A sink declares either a hostname or one IP literal, never both; an IP literal never matches a hostname sink, and a hostname never matches an IP sink. Because the accepted spellings are unique, string equality is a sufficient comparison.
    - Port: absent → the sink's default; present → must be decimal digits without leading zeros, equal to the sink's `port`; an empty port (`host:`) → BLOCK.
    - A **fragment** (`#…`) anywhere → BLOCK.
    - Any character outside the RFC 3986 URI character set, or more than one `?` → BLOCK.
