@@ -1,66 +1,84 @@
-# ADR-0005: Per-agent keys via HKDF; key provenance; rotation and revocation
+# ADR-0005: Agent identity, credentials and authorization — separated
 
-- Decision: **Proposed**
-- Implementation: **Not approved** (Governance D5)
-- Date: 2026-11-25 · Revised 2026-11-25 after review (PR #1)
+- Decision: **Proposed** · Reviewer direction: URI identity approved in principle (architecture review round 2, 2026-11-25)
+- Implementation: **Not approved**
+- Date: 2026-11-25 · Revised twice after review (PR #1 round 1; round 2)
 - Closes: GS-AUD-06, GS-AUD-07
 
 ## Context
 
-All agents share one HMAC key: any key holder can sign as anyone and rewrite `hop`/`taint` (GS-AUD-06). Any 16-byte string is accepted as a key (GS-AUD-07). The first draft proposed `HMAC(master, "agent/" + id + "/" + epoch)` and a 32-byte minimum; review correctly noted that the derivation lacked a standard KDF, unambiguous encoding and domain separation, and that **length is not entropy**.
+All agents share one HMAC key: any key holder can sign as anyone and rewrite `hop`/`taint`/flow state (GS-AUD-06). Any 16-byte string is accepted as a key (GS-AUD-07). v1 agent IDs are free-form strings that mix "who" with "how it proves it".
+
+Industry work on agent identity is converging on workload-identity standards: the IETF draft [draft-ietf-wimse-aims](https://datatracker.ietf.org/doc/draft-ietf-wimse-aims/) describes AI agents using SPIFFE, WIMSE, OAuth and OpenID SSF. It is an **Internet-Draft, not an RFC**, and may change.
 
 ## Decision
 
-### 1. Key provenance, not key guessing
+### 1. Three things, three lifecycles
 
-The entropy of a byte string **cannot be measured** from the bytes. Instead the runtime only accepts keys whose *format* shows they came from a CSPRNG tool:
+| Concept | What it is | Example | Changes when |
+|---|---|---|---|
+| **Identity** | A stable name for an agent | `spiffe://genesis.local/agents/skynet` | The agent is retired or renamed — never on key rotation |
+| **Credential** | Proof that a sender controls the identity | HMAC key derived for that identity (Core v2.0) | Rotation, revocation, compromise |
+| **Authorization** | What the identity may do | Roles, scopes, capabilities, flow readers (ADR-0003, ADR-0009) | Policy changes |
 
-- `genesis-security keygen` emits `gsk1_<base64url(32 random bytes from secrets.token_bytes)>_<crc>` — a versioned prefix, 256 bits from the OS CSPRNG, and a checksum against typos.
-- The runtime accepts **only** this format (and future `gskN_` versions). Hex strings, raw text, passwords and padded values are refused, whatever their length.
-- Low-diversity sanity checks (e.g. all bytes equal, < 16 distinct byte values) still refuse obviously broken keys, but they are a backstop, not an entropy guarantee.
-- Documentation says plainly: keys must come from `keygen` or another CSPRNG; the format check prevents accidents, not determined misuse.
+Code, policy and audit refer to **identities**. Only the credential provider touches keys.
 
-### 2. Derivation: HKDF-SHA256 with domain separation
+### 2. Identity format
 
-Per-agent keys use HKDF (RFC 5869) with SHA-256, implemented with stdlib `hmac`:
+- An identity is a URI: `spiffe://<trust-domain>/<path>`. The SPIFFE ID shape is used because it is widely deployed and simple; Genesis validates the shape itself (stdlib), it does not depend on SPIFFE software.
+- `trust-domain`: lowercase DNS-like label set chosen by the operator (`genesis.local` by default for self-hosted). Path segments `[a-z0-9._-]`, max 255 characters total, NFC.
+- **No secrets, tokens or credentials in an identity URI.** Ever. The validator rejects query strings, fragments and userinfo.
+- The owner is an identity too (`spiffe://<td>/owner` or a named human principal), so flow readers (ADR-0009) and audit records use one namespace.
+- v1 string IDs map to `spiffe://genesis.local/agents/<id>` during migration.
+
+### 3. Credentials: provider interface
+
+```
+CredentialProvider
+  sign(identity, epoch, bytes) -> signature        # sender side
+  verify(identity, epoch, bytes, signature) -> bool
+  rotate(identity) / revoke(identity, epoch|all)
+```
+
+- **Default provider (Core v2.0): HMAC-SHA256** with keys derived by HKDF (below).
+- Future providers plug in behind the same interface: asymmetric keys with the `[crypto]` extra (ADR-0002), and WIMSE/SPIFFE credentials (X.509-SVID, JWT-SVID or WIMSE tokens) when those specifications stabilise.
+- **Documentation must not claim WIMSE or SPIFFE support** because identities look like SPIFFE IDs. The claim is limited to: *identity format compatible with SPIFFE IDs; credential providers designed for future interoperability.*
+
+### 4. Key provenance, not key guessing
+
+Entropy cannot be measured from bytes, so the runtime only accepts keys whose format shows they came from a CSPRNG tool:
+
+- `genesis-security keygen` emits `gsk1_<base64url(32 bytes from secrets.token_bytes)>_<crc>`.
+- Only `gskN_` keys are accepted; hex, raw text, passwords and padded values are refused whatever their length. Low-diversity checks remain as a backstop, not an entropy guarantee.
+
+### 5. Derivation: HKDF-SHA256 with domain separation
 
 ```
 PRK      = HKDF-Extract(salt = deployment_id_bytes, IKM = master_key)
-K_agent  = HKDF-Expand(PRK, info, L = 32)
+K_ident  = HKDF-Expand(PRK, info, L = 32)
 info     = "genesis-security/v1/agent-signing" || 0x00
-           || len(agent_id) as 2-byte big-endian || agent_id (UTF-8, NFC)
+           || len(identity_uri) as 2-byte big-endian || identity_uri (UTF-8, NFC)
            || epoch as 4-byte big-endian
 ```
 
-- Length-prefixed fields make the encoding unambiguous (`"a/b" + "1"` can never equal `"a" + "/b1"`).
-- `agent_id`: `^[a-z0-9][a-z0-9._-]{0,63}$`, NFC, compared byte-wise.
-- Separate `info` labels for every purpose: `…/agent-signing`, `…/audit-chain`, `…/policy-auth`, `…/state-integrity`. One key is never used for two purposes.
-- Known-answer test vectors are published with the implementation.
+- Length-prefixed fields: no two (identity, epoch) pairs can produce the same `info`.
+- Separate labels per purpose: `…/agent-signing`, `…/audit-chain`, `…/policy-auth`, `…/state-integrity`.
+- Known-answer test vectors ship with the implementation.
 
-### 3. Storage and access
+### 6. Storage and access
 
-- The **master key** lives only with the operator and the verifying gate: an environment variable or a file with mode `0600` owned by the runtime user (Windows: ACL to that user only). The runtime refuses to start if the key file is group/world-readable.
-- **Agent processes receive only their own `K_agent`**, never the master key.
-- Keys never appear in logs, verdict reasons, audit entries or exceptions (existing redaction + tests).
-- OS keychain / HSM / KMS backends are an Enterprise extension behind a `KeyProvider` interface.
+- Master key only with the operator and verifying gate: env var or a `0600` file owned by the runtime user (Windows: owner-only ACL). Refuse to start on wider permissions.
+- Each agent process receives only its own `K_ident`.
+- Keys never appear in logs, reasons, audit entries or exceptions.
 
-### 4. Verification
+### 7. Rotation and revocation (credential lifecycle — identity unchanged)
 
-The verifying gate derives `K_sender` from the envelope's `from` and `epoch` and checks `sig`. A message from A signed with B's key fails. Signature checks use constant-time comparison.
-
-### 5. Epochs, rotation and revocation
-
-- `epoch` is an unsigned 32-bit integer, part of the signed envelope.
-- **Rotation:** the operator advances the deployment epoch; verifiers accept `current` and `current − 1` for an overlap window (`rotation_overlap_s`, default 1 hour), then only `current`.
-- **Revocation:** a revocation list of `(agent_id, epoch_or_all)` in the state store (ADR-0006). Revoked → `BLOCK` + audit event. Revocation takes effect immediately; it does not wait for the overlap window.
-- **Master key compromise:** rotate the master key (new `deployment_id` salt), re-issue all agent keys, start a new audit chain anchored to the old one's final checkpoint.
-
-### 6. Asymmetric option
-
-With the `[crypto]` extra (ADR-0002), agents may hold private signing keys and verifiers only public keys, removing the master key from verifying gates. The envelope format reserves an `alg` field for this.
+- `epoch` (uint32) is part of the signed envelope. Rotation advances it; verifiers accept `current` and `current − 1` for `rotation_overlap_s` (default 1 h).
+- Revocation list `(identity, epoch | all)` in the state store; effective immediately; `BLOCK` + audit.
+- Master key compromise: new `deployment_id` salt, re-issue all credentials, new audit chain anchored to the old final checkpoint. Identities stay the same.
 
 ## Consequences
 
-- A compromised worker agent can no longer impersonate others or forge envelopes for them.
-- With HMAC, the verifying gate remains a high-value secret holder; the asymmetric option removes that.
-- Existing v1 keys (hex or text) are refused in v2.0; v1.x warns. `keygen` output from v1 (hex) can be converted with a migration command.
+- A compromised worker can no longer impersonate others; audit and policy speak in stable identities.
+- With the HMAC provider, the verifying gate remains a secret holder; asymmetric or WIMSE providers can remove that later without changing identities.
+- Migration: v1 string IDs and hex keys are converted by a migration command; v1.x warns, v2.0 refuses old formats.
