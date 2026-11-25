@@ -41,10 +41,15 @@ FlowState = {
 - **Invariant — readers are derived, never supplied.** At every egress decision the runtime computes
 
   ```
-  effective_readers(session) = ⋂ policy.readers(c) for c in classes   ∪   valid_grants(session)
+  effective_readers(session) = ⋂  ( policy.readers(c) ∪ valid_grants(session, c) )
+                               c ∈ classes
   ```
 
-  from the **receiver's current validated policy** and the session's valid declassification grants (§8). A `readers` value from an agent, a tool, or an envelope is never used as input; at most it is logged for diagnosis. So `classes` and `readers` cannot disagree: a session whose classes say "private" cannot hold a reader set that opens it.
+  from the **receiver's current validated policy** and the session's valid declassification grants (§8). Grants are added **per class, before the intersection**: a destination must be allowed by every class in the session, either by policy or by a grant for that class. If `classes` is empty the flow rules do not apply and normal Gate rules decide (§6 step 2); the intersection over an empty set is never evaluated.
+
+  > A declassification grant may widen readers only for the specific data class, session and scope it authorizes. It never widens readers for unrelated classes.
+
+  Example: `private:accounts` → {owner, bank-api}, `private:payroll` → {owner, hr-api}. A grant of `hr-api` for `accounts` gives ({owner, bank-api, hr-api} ∩ {owner, hr-api}) = {owner, hr-api}; a grant of `bank-api` for `accounts` gives {owner} — `bank-api` still cannot receive payroll data. A `readers` value from an agent, a tool, or an envelope is never used as input; at most it is logged for diagnosis. So `classes` and `readers` cannot disagree: a session whose classes say "private" cannot hold a reader set that opens it.
 - The two axes are tested independently, including the cross cases: confidential-but-trusted (bank records from the owner's database: `private:accounts`, T1) and public-but-untrusted (a web page with injected instructions: no class, T3). A value that mixes both carries both: `private:accounts` **and** T3.
 
 ### 2. Who records and attests flow state (closes B1)
@@ -103,17 +108,21 @@ This closes the race between **data disclosure and flow-state elevation**. It do
 
 **Egress path (authorize → permit → revalidate → act):**
 
-1. **Freeze the payload.** The gateway takes the complete request (sink, method, headers, body, recipient fields) as bytes and computes `payload_digest = SHA-256(canonical request)`. From here on, only these bytes can be sent; a streamed or lazily built body is materialised first or the call is BLOCKED.
+1. **Freeze the payload.** The gateway serialises the request itself — request line, every header in final order and form, and body — into the exact bytes it will write to the TLS stream, and computes `payload_digest = SHA-256(wire bytes)`. There is no separate "canonical form": **the digest is over the bytes that are sent**. To make that possible in mode 02:
+   - the gateway uses its own HTTP/1.1 serialiser (no HTTP/2 in Core v2.0 mode 02); gateway-managed headers (`Host`, `Content-Length`, and any credentials the gateway injects) are computed **before** the digest; `Transfer-Encoding`, `Connection`, `TE`, `Upgrade` and `Expect` are not sent;
+   - no client-side transformation after the digest: no automatic compression, header insertion, case changes, redirects or retries (a retry is a new request needing a new permit);
+   - a streamed or lazily built body is materialised first, or the call is BLOCKED;
+   - at step 4 the bytes written are compared with the digest; any difference aborts before the first byte is written.
 2. **Authorize** (`BEGIN IMMEDIATE`): read the committed flow state at version `v`, evaluate readers and sink policy (§5, §6), and on ALLOW write a **permit** and the ledger decision, then commit:
 
    ```
    permit = { permit_id (128-bit random), session_id, sink, payload_digest,
-              flow_state_version: v, policy_fp, issued_at, expires_at (default 30 s),
-              status: issued }
+              issued_version: v, revalidated_version: null, consumed_version: null,
+              policy_fp, issued_at, expires_at (default 30 s), status: issued }
    ```
 
-3. **Revalidate and consume** (`BEGIN IMMEDIATE`, immediately before sending): the permit must exist, be `issued`, unexpired, and match `session_id`, sink and `payload_digest`; the policy fingerprint must be unchanged. If the session's current version is still `v`, set `status: consumed` and commit. If the version has changed, **re-run step 2's evaluation against the current state**; consume only if it still allows this sink, otherwise mark the permit `revoked` and BLOCK.
-4. **Send** exactly the frozen bytes, then record the outcome (`sent`, `failed`, `unknown`) in the ledger.
+3. **Revalidate and consume** (`BEGIN IMMEDIATE`, immediately before sending): the permit must exist, be `issued`, unexpired, and match `session_id`, sink and `payload_digest`; the policy fingerprint must be unchanged. Record the current version as `revalidated_version`. If it is still `v`, set `status: consumed`, `consumed_version: v`, and commit. If the version has changed, **re-run step 2's evaluation against the current state**; consume only if it still allows this sink (`consumed_version` = the new version, and the ledger records the re-evaluation), otherwise mark the permit `revoked` and BLOCK. Auditors therefore see the version the send was actually authorized under, not only the version at issue.
+4. **Send** exactly the frozen bytes, then record the outcome (`sent`, `failed`, `unknown`) with `issued_version`, `revalidated_version` and `consumed_version` in the ledger.
 
 Why the window after step 3 is safe: between consuming the permit and the bytes leaving, state may still rise, but the payload was frozen in step 1, and data is released to agents only after its raise is committed (read path). Data that raised the state after step 1 cannot be in those bytes. The permit ensures that the bytes sent are the bytes that were authorized, and that the authorization was checked against the latest committed state no earlier than the permit's consumption.
 
@@ -134,7 +143,7 @@ port         = 443
 path_prefix  = "/v1/transfers/"
 methods      = ["POST"]
 verification = "tls-spki-pin"                    # tls-hostname | tls-spki-pin | mtls-spiffe
-spki_sha256  = ["kXr…="]                         # required for tls-spki-pin
+spki_sha256  = ["<base64 SHA-256 of SPKI>"]       # PLACEHOLDER — required for tls-spki-pin; not a usable value
 # principal = "spiffe://bank.example/api"        # allowed ONLY with verification = "mtls-spiffe"
 recipient_mode = "fields"                         # fixed | fields
 arguments_closed = true                           # any argument not declared below → BLOCK
@@ -156,8 +165,8 @@ Resolution rules:
 3. **Match** scheme, host, port, path prefix and method exactly.
 4. **Redirects off by default.** If a sink enables them, each hop is re-resolved and must match the *same* sink; a hop to anything else aborts before any body is sent on that hop.
 5. **DNS:** resolve once per new connection, refuse private/loopback/link-local/unspecified addresses unless the sink declares them, and connect to the address that was checked (no re-resolution mid-request) — closing DNS rebinding.
-6. **Connection reuse:** the gateway's pool is keyed by `(sink name, verified IP, port, verification mode, pinned keys)`. A connection is reused only for the **same sink** and the same verified address, never for another sink, even one with the same host. HTTP/2 connection coalescing and TLS session resumption across sinks are disabled. Pooled connections are closed on policy reload, on sink definition change, and after a bounded lifetime (default 5 min), after which DNS and TLS checks run again. Tools cannot supply their own client or pool.
-7. **Proxies:** environment proxy settings are ignored; a proxy is used only if declared on the sink, and then the sink checks apply to the end server over the tunnel, not to the proxy.
+6. **Connection reuse:** the gateway's pool is keyed by `(sink name, verified IP, port, verification mode, pinned keys)`, and for `mtls-spiffe` also by `(client SVID identity, client credential epoch, trust-bundle fingerprint)`. When any of these changes — pins edited, credential rotated or revoked, trust bundle updated — the affected connections are closed **immediately**, not at pool expiry. A connection is reused only for the **same sink** and the same verified address, never for another sink, even one with the same host. HTTP/2 connection coalescing and TLS session resumption across sinks are disabled. Pooled connections are closed on policy reload, on sink definition change, and after a bounded lifetime (default 5 min), after which DNS and TLS checks run again. Tools cannot supply their own client or pool.
+7. **Proxies:** environment proxy settings are ignored; a proxy is used only if declared on the sink. The runtime resolves and checks the end server's address itself (rule 5) and sends `CONNECT <verified IP>:<port>` — never a hostname — then runs TLS to the end server with the sink's hostname for SNI and verification (rule 8). A proxy that will only accept hostnames (and so resolves DNS itself) is **unsupported in mode 02**: it would remove the DNS-rebinding guarantee.
 8. **Verification levels — what each one proves.** The channel proves identity; the agent never does. The three modes give different guarantees and are reported by their own names, not as a generic "principal verified":
 
    | `verification` | Proves | Does **not** prove |
@@ -171,7 +180,11 @@ Resolution rules:
    - `fixed` — the endpoint alone determines the recipient. The tool's arguments must not be able to select another one.
    - `fields` — each place that can select a recipient is listed with its `location` (`header`, `query`, `path`, `body` via JSON Pointer, `form`, or `metadata` such as `to`/`cc`/`bcc`, `channel_id`, `thread_id`) and an `allow` list. **Every** occurrence is checked; for arrays, **every** element must match; a missing required field → BLOCK.
 
-   In mode 02, every network/message sink must also set `arguments_closed = true`: any argument, header, query key or body member that is not declared → **BLOCK**. Tools that can choose a recipient by indirect means the gateway cannot see (server-side address books, templates, IDs resolved by the remote service) must expose that selector as a recipient field; if they cannot, they are **unsupported in mode 02** and the policy is rejected.
+   **Closed arguments.** In mode 02, every network/message sink must set `arguments_closed = true`, which covers **every** location: tool arguments, path parameters, query keys, headers, body members (at any depth), form fields and message metadata (including `channel_id` and `thread_id`). Anything not declared in the sink's argument schema or as a recipient field → **BLOCK**. Protocol-managed headers (`Host`, `Content-Length`, `Transfer-Encoding`, `Connection`, `TE`, `Upgrade`, `Expect`, and gateway-injected credentials) are produced by the gateway only; if an agent or tool supplies any of them → **BLOCK**.
+
+   **Matching grammar for `allow`.** Each entry is either an exact literal or a literal followed by a single trailing `*` (prefix match). A `*` anywhere else, character classes and regular expressions are rejected when the policy loads. Values are compared as exact strings after decoding the transport encoding **once** (percent-decoding for path and query, JSON string unescaping for body, form decoding for forms); no case-folding, trimming or Unicode normalisation. A value containing a non-printable or non-ASCII character, or that still contains an encoding sequence after one decode (e.g. `%25xx`), → **BLOCK**.
+
+   **Duplicates and multiple locations.** Duplicate header names (case-insensitive), duplicate query keys, duplicate form fields and duplicate JSON object keys → **BLOCK** (the gateway's parser detects duplicate JSON keys instead of keeping the last one). A recipient value appearing in a location not declared for it → **BLOCK**; if it is declared in several locations, every occurrence must match. The meaning of the allowlist therefore does not depend on any client's or server's parser. Tools that can choose a recipient by indirect means the gateway cannot see (server-side address books, templates, IDs resolved by the remote service) must expose that selector as a recipient field; if they cannot, they are **unsupported in mode 02** and the policy is rejected.
 10. **`onward_sharing` is a declaration, not a proof.** Its `onward_sharing_basis` records whether it is an assumption, backed by a contract, or by a technical control. Reports and `doctor` show the basis; the guarantee in §11 inherits it.
 
 ### 6. Egress enforcement
@@ -196,7 +209,7 @@ Allowed readers are the **intersection** of the readers of every class in the se
 | **Human-approved** (Human Gate) | Yes | Owner identity authenticated; dedicated declassification prompt showing class, session, destination scope and reason |
 | **Owner-authorized policy rule** | Yes, narrowly | Rule created or approved by the owner, signed/authenticated with the policy (ADR-0004); must name class, allowed reader(s) or sink(s), max use count and expiry; may not name "any" |
 
-Every declassification records: owner identity, session ID, task ID, data class, granted scope (readers/sinks), reason, policy ID + version, timestamp, and a **single-use approval token** bound to `(session_id, class, scope, nonce, expiry)`. A token is rejected for any other session, class or scope, after use, or after expiry. Declassification adds readers for that session only; it never edits the class's readers in policy.
+Every declassification records: owner identity, session ID, task ID, data class, granted scope (readers/sinks), reason, policy ID + version, timestamp, and a **single-use approval token** bound to `(session_id, class, scope, nonce, expiry)`. A token is rejected for any other session, class or scope, after use, or after expiry. A grant is stored as `(session_id, class, readers/sinks)` and adds readers **for that class in that session only** (§1 formula); it never edits the class's readers in policy and never applies to any other class.
 
 ### 9. Enforcement boundary
 
@@ -216,15 +229,20 @@ Guarantees hold **only for egress performed by the Execution Gateway**. Deployme
 
 - `policy_id`: 128-bit random value generated at `init`, one per deployment; it identifies *whose* policy this is.
 - `policy_version`: integer, increased by the owner on every accepted policy change.
-- `policy_fp`: `SHA-256` over the **validated** policy, serialised with RFC 8785 JSON Canonicalization (sorted keys, no whitespace, UTF-8; comments, key order and formatting in the TOML file do not affect it). Equal fingerprints mean the same effective rules; it is not a secret and not an authenticity proof (authenticity of the policy is ADR-0004's job).
+- `policy_fp`: `SHA-256` over the **validated effective policy** — every default materialised, so two TOML files with the same effect have the same fingerprint — serialised with the JSON Canonicalization Scheme of **RFC 8785**. To keep canonicalisation unambiguous, the effective policy is restricted to an I-JSON subset that the validator enforces before hashing: object keys are ASCII (so RFC 8785's UTF-16 key ordering equals byte ordering); numbers are integers within ±2⁵³ (no floats, so no number-formatting or NaN/Infinity cases); no duplicate keys (TOML forbids them, and the converter refuses them); strings are valid UTF-8 without lone surrogates, escaped per RFC 8785 §3.2.2.2. Conformance means reproducing RFC 8785's published examples within this subset plus Genesis test vectors; a generic `json.dumps(sort_keys=True)` is **not** assumed to be equivalent. Equal fingerprints mean the same effective rules; a fingerprint is not a secret and not an authenticity proof (authenticity of the policy is ADR-0004's job).
 
-Comparison never imports the sender's rules: the receiver always computes readers from **its own** policy (§1 invariant). The fingerprint only decides how much of the sender's labelling the receiver can interpret:
+Comparison never imports the sender's rules: the receiver always computes readers from **its own** policy (§1 invariant). The receiver's state store keeps, durably, the **current** and **immediately previous** accepted `(policy_version, policy_fp)` pairs; they change only when the owner installs a new policy, never because of an envelope. Version and fingerprint are always checked **together**:
 
-| Comparison | Meaning | Action |
+| Envelope `(policy_version, policy_fp)` vs receiver | Meaning | Action |
 |---|---|---|
-| Same `policy_id`, same `policy_fp` | Same rules | Accept class names as-is |
-| Same `policy_id`, `policy_fp` equals the receiver's **previous** accepted version | Policy changed while the message was in flight | Map classes by name; classes unknown to the receiver → `private:unclassified`; log `GSX-08 policy drift` |
-| Same `policy_id`, `policy_fp` matches neither the receiver's current nor its previous accepted version | Unknown policy state | Owner-only, T3 |
+| = current version **and** = current fp | Same rules | Accept class names as-is |
+| = previous version **and** = previous fp | Policy changed while the message was in flight | Compatibility check: map classes by name; unknown → `private:unclassified`; log `GSX-08 policy drift` |
+| Version older than previous | Stale or replayed | Owner-only, T3, `GSX-08` |
+| Same version as current or previous, **different** fp | Inconsistent (forged or corrupted policy state) | Owner-only, T3, `GSX-08` (alert) |
+| Version newer than current | Receiver has not installed it | Owner-only, T3 until the owner installs that policy; the envelope never installs or selects a policy |
+| Any other combination / unknown fp | Unknown policy state | Owner-only, T3 |
+
+No envelope can make the receiver evaluate under an older policy: the receiver evaluates under its **current** policy in every row; the table only limits how much of the sender's labelling it trusts.
 
 The receiver then applies:
 

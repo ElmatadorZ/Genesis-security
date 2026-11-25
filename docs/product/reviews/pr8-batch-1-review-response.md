@@ -54,3 +54,19 @@ So that batches 2 and 3 do not contradict the revised ADRs: threat model F3, F4 
 | ADR-0005 URI labels | Per-label DNS rules (1–63, hyphen not at either end of any label, no `xn--`, ≥2 labels, no all-digit TLD, ≤253); stated as stricter than SPIFFE | ADR-0005 §2 |
 
 Only these points were changed; batches 2 and 3 untouched except the backlog acceptance criteria for P1-19/P1-20 below.
+
+## Round 3 (2026-11-25) — B1, B3, B4.1, ADR-0005 accepted; B2 formula, R3 downgrade, B4.2 scope open
+
+| Priority | Item | Resolution | Where |
+|---|---|---|---|
+| 1 | **B2** grants widened readers across classes | Formula corrected to `⋂_c (policy.readers(c) ∪ grants(session, c))`; grants stored per class; empty classes → normal Gate rules; invariant sentence adopted; accounts/payroll worked example | ADR-0009 §1, §8 |
+| 1 | **R3** downgrade | Durable current + previous `(version, fp)` pairs; version and fp checked together; table covers older, inconsistent, newer and unknown; receiver always evaluates under its current policy | ADR-0009 §10 |
+| 1 | **B4.2** scope | `arguments_closed` covers every location; protocol-managed headers gateway-only; `allow` grammar = exact or trailing `*`; single decode, no normalisation; duplicates and undeclared locations BLOCK | ADR-0009 §5.9 |
+| 2 | B3 versions | Permit and ledger carry issued / revalidated / consumed versions | ADR-0009 §4 |
+| 2 | B3 exact bytes | Digest is over the wire bytes the gateway's own serialiser writes; no post-digest transformation; compared at send | ADR-0009 §4 |
+| 2 | B4.3 proxy DNS, pool identity | `CONNECT <verified IP>`; hostname-only proxies unsupported in mode 02; mTLS pool keyed by client SVID, epoch, trust-bundle fp, closed immediately on change; SPKI example marked placeholder | ADR-0009 §5.6–5.7 |
+| 2 | R3 RFC 8785 | Effective policy with defaults; I-JSON subset enforced before hashing; conformance by RFC examples + vectors, not `json.dumps` | ADR-0009 §10 |
+| 2 | ADR-0005 anchor | Anchor only to a checkpoint from outside the restored store; otherwise `continuity: unverified` | ADR-0005 §7 |
+| 3 | Tests | P1-19 AC 7c, 7d, 9b, 9c; P1-20 AC 2; P1-22a AC 1f | backlog |
+
+Reviewer's agreement that B1 needs the out-of-process precondition, and that the review was of pasted text rather than an independent check of commits or CI, is noted.
