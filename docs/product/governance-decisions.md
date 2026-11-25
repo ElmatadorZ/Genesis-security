@@ -94,3 +94,13 @@ Raised in the PR #1 review and written into ADR-0003 §6 / ADR-0008 §3. **Appro
 | R3 | v1.x security-fix window after v2.0 ships: **6 months** | **Approved** 2026-11-25 |
 | R4 | Security fixes may change behaviour in minor/patch releases, always toward stricter, with advisory + migration notice | **Approved** 2026-11-25 |
 
+## Architecture review round 3 — clarifications (2026-11-25)
+
+| Item | Decision / status |
+|---|---|
+| Split v2.0-alpha | **Approved**: alpha.1 *Core Enforcement* (default-deny, capability registry, information flow, readers, cross-agent taint, fail-closed + audit); alpha.2 *Integration & Validation* (MCP adapter, AgentDojo, adversarial + regression testing, identity/credential hardening, docs + migration). Item placement preliminary until confirmed. No date pressure: alpha.1 ships only when its gate passes |
+| PR #7 (v1.1 code) | **Separate review**; not blocked by the earlier "not approved", which referred to v2.0 architecture implementation only. D5 is not blanket approval of all code |
+| PR #8 (architecture docs) | Under review; its approval does not substitute for PR #7's |
+| Phase 1 — v2.0 core implementation | **Not approved** |
+| Owner-only declassification; undeclared data = private; action-selection leakage as residual risk | **Agreed** |
+
