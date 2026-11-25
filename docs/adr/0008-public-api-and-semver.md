@@ -25,7 +25,7 @@ Breaking changes to the public API only in a new major version. Deprecations war
 2. Such a release ships with: a **GitHub Security Advisory** (CVE when applicable), a **migration notice** at the top of the changelog under *Security — behaviour change*, the exact behaviour before and after, and how to detect affected deployments (e.g. a shadow-mode report or a `policy check` warning).
 3. The change is always **toward stricter** behaviour. A release never loosens a default to restore compatibility.
 4. Where possible the stricter behaviour is first shipped as a warning in the same release, but never when the warning period would itself leave a known exploitable gap.
-5. **Security-supported versions** are listed in `SECURITY.md`: the latest major receives all fixes; the previous major receives security fixes for a fixed window after the new major ships (window length is an owner decision; proposed 6 months, see ADR-0003 §6).
+5. **Security-supported versions** are listed in `SECURITY.md`: the latest major receives all fixes; the previous major receives security fixes for a fixed window after the new major ships (**6 months**, Governance R3 — approved).
 6. **Compatibility modes** (e.g. v1-compat) are never a supported *security* configuration. A vulnerability that exists only because a compatibility mode is enabled may be answered by documentation rather than a fix.
 
 ### 4. Release statements

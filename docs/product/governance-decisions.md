@@ -17,7 +17,7 @@
 | D2 | May essential security be held back for Enterprise? | **No.** Every edition gets the full security core | **Approved** |
 | D3 | Who reviews independently (gate G9)? | Two layers: internal independent review + external security review | **Reviewer pending** |
 | D4 | Planning tool | GitHub is the single source of truth (PRs, Issues, ADRs, release gates). No whiteboard until there are several people or workstreams | **Approved** |
-| D5 | May Phase 1 source code changes start? | **Not yet.** Phase 1 items may be *prepared* (issues, designs, test plans); code changes wait for PR #1 review and approval | **Approved** |
+| D5 | May Phase 1 source code changes start? | Initially "not yet". **Updated 2026-11-25 (13:42): owner approves merging PR #1 and starting v1.1 code**, one PR per work item, each with a regression test shown failing on `main` first | **Approved — code may start (v1.1)** |
 
 ## D1 — Default-deny transition
 
@@ -71,9 +71,9 @@ AI assistants used on this project (including the one that wrote the code and th
 
 G9 is mandatory before any release that claims to be independently reviewed. A release without G9 must say "not independently reviewed".
 
-## Approved for preparation (no code changes yet)
+## Approved work order
 
-Tracked as GitHub Issues, in this order:
+Tracked as GitHub Issues, in this order (code approved for v1.1 on 2026-11-25, see D5):
 
 1. P1-03 — Policy schema validation
 2. Fail-closed policy loading (part of P1-03)
@@ -81,16 +81,16 @@ Tracked as GitHub Issues, in this order:
 4. P1-02 — Tool identity and capability-based (semantic) authorization
 5. P1-11 + red-team additions — Regression and adversarial tests
 
-Preparation = issue with design notes, acceptance criteria and test plan. Implementation starts when D5 changes to approved.
+Each item is one PR with its regression test shown failing on `main` first. D5 was approved on 2026-11-25.
 
-## Proposed additions from architecture review (pending owner decision)
+## Additions from architecture review (R1–R4)
 
-Raised in the PR #1 review and written into ADR-0003 §6 / ADR-0008 §3 as **proposals**. They do not change D1 until the owner decides.
+Raised in the PR #1 review and written into ADR-0003 §6 / ADR-0008 §3. **Approved by the owner on 2026-11-25**; they extend D1.
 
 | # | Proposal | Owner decision |
 |---|---|---|
-| R1 | Compatibility mode in v2.0 needs an explicit named setting **and** an environment acknowledgement; either missing → strict | Pending |
-| R2 | Compatibility mode removed in v3.0 | Pending |
-| R3 | v1.x security-fix window after v2.0 ships (proposed 6 months) | Pending |
-| R4 | Security fixes may change behaviour in minor/patch releases, always toward stricter, with advisory + migration notice | Pending |
+| R1 | Compatibility mode in v2.0 needs an explicit named setting **and** an environment acknowledgement; either missing → strict | **Approved** 2026-11-25 |
+| R2 | Compatibility mode removed in v3.0 | **Approved** 2026-11-25 |
+| R3 | v1.x security-fix window after v2.0 ships: **6 months** | **Approved** 2026-11-25 |
+| R4 | Security fixes may change behaviour in minor/patch releases, always toward stricter, with advisory + migration notice | **Approved** 2026-11-25 |
 

@@ -81,7 +81,7 @@ Checks run on the **canonical form** of each argument, never the raw string:
 - **No accidental enabling.** In v2.0, compatibility mode requires an explicit, named setting (`compat_mode = "v1-insecure"`) **and** an environment acknowledgement (`GENESIS_SECURITY_ACCEPT_INSECURE_COMPAT=1`). Either missing → strict.
 - **Shadow mode** (`mode=shadow`): evaluates v2.0 rules beside v1.x, reports what would be blocked, never changes a v1.x verdict.
 - Compatibility mode is never described as secure enforcement anywhere.
-- **Sunset:** compatibility mode is removed in v3.0. v1.x receives security fixes for a fixed window after v2.0 ships (**length is an owner decision**, proposed: 6 months), stated in the release policy (ADR-0008).
+- **Sunset** (Governance R2, R3 — approved): compatibility mode is removed in v3.0. v1.x receives security fixes for **6 months** after v2.0 ships, stated in the release policy (ADR-0008).
 - A migration guide ships with the first warning release.
 
 ## Consequences

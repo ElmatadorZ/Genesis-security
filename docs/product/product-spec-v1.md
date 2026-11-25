@@ -180,8 +180,8 @@ Recorded in [Governance Decision v1.0](governance-decisions.md) (2026-11-25):
 1. **Default-deny in v2.0** — approved in principle, with a v1.x compatibility mode under binding conditions (clear "NOT SECURE ENFORCEMENT" warnings, a shadow compatibility check, a migration guide, never presented as secure).
 2. **No security behind a paywall** — approved; the full list of what every edition must include is in D2.
 3. **External reviewer** — pending. Two layers: internal independent review + external security review. AI assistants are not counted as independent auditors.
-4. **Phase 1 code** — not yet approved; Phase 1 items may be prepared as issues.
+4. **Phase 1 code** — approved to start with v1.1 (D5, updated 2026-11-25).
 
-Review proposals R1–R4 (compat-mode opt-in, v3.0 removal, v1.x fix window, security-over-compatibility) await the owner — see [Governance](governance-decisions.md#proposed-additions-from-architecture-review-pending-owner-decision).
+Review additions R1–R4 (compat-mode opt-in, v3.0 removal, 6-month v1.x fix window, security over compatibility) were approved on 2026-11-25 — see [Governance](governance-decisions.md#additions-from-architecture-review-r1r4). Phase 1 code was approved to start with v1.1 (D5).
 
 Still open: **ACS overlap** (adopt, map to, or ignore the OWASP Agent Control Standard) — backlog P0-05.

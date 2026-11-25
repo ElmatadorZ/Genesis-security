@@ -16,7 +16,7 @@ Size: S ≈ ≤ 1 day · M ≈ 2–4 days · L ≈ 1–2 weeks (solo builder pac
 
 ## Phase 1 — Harden the security core (target: Core v2.0)
 
-> **Status:** approved for *preparation* only ([Governance D5](governance-decisions.md)). No source changes until PR #1 is reviewed and D5 is approved.
+> **Status:** code approved for v1.1 ([Governance D5](governance-decisions.md), 2026-11-25). Release plan: [Production roadmap](roadmap-production.md).
 
 Gate to leave Phase 1: release gates G1–G6 and G8 pass; 0 open High findings.
 
