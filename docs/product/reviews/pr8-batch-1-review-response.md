@@ -70,3 +70,15 @@ Only these points were changed; batches 2 and 3 untouched except the backlog acc
 | 3 | Tests | P1-19 AC 7c, 7d, 9b, 9c; P1-20 AC 2; P1-22a AC 1f | backlog |
 
 Reviewer's agreement that B1 needs the out-of-process precondition, and that the review was of pasted text rather than an independent check of commits or CI, is noted.
+
+## Round 4 (2026-11-25) — B2, B3.1, B4.3, ADR-0005 anchor accepted; R3, B4.2 small changes; B3.2 clarify
+
+| Item | Resolution | Where |
+|---|---|---|
+| R3.1 monotonic install | Strictly increasing `policy_version` per `policy_id`; lower or reused versions rejected; new lineage only via audited owner operation `policy new-lineage` | ADR-0009 §10 |
+| R3.2 integer range | −(2⁵³ − 1) … 2⁵³ − 1 inclusive; ±2⁵³ rejected; boundary tests | ADR-0009 §10; backlog 9c |
+| B4.2.1 duplicates after decoding | Duplicates detected on decoded keys | ADR-0009 §5.9 step 4 |
+| B4.2.2 parse order, delimiters | Gateway is the only encoder (structured fields); for supplied URLs/forms: split on raw structure → decode once → reject reserved/encoded delimiters → dedupe → re-encode; no re-decoding inside the boundary; remote decoding stated as outside it | ADR-0009 §5.9 |
+| B4.2.3 JSON recursion | Recursive at every depth, keys compared after unescaping | ADR-0009 §5.9 |
+| B3.2 wording | One immutable buffer; digest = HTTP application bytes, not TLS ciphertext; verified before the first byte; the same buffer object is written; no re-serialisation | ADR-0009 §4 |
+| B2 scope note | Grants already stored as (session_id, class, scope); scope checked on every use (§8 tokens) | — |
