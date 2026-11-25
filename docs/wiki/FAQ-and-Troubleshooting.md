@@ -22,6 +22,12 @@ It's v1.0, red-teamed and tested on Linux and Windows. Read [Limitations and Res
 **`RuntimeError: Set GENESIS_SECURITY_KEY`**
 `from_env()`, `checkpoint` and `verify-audit` need the key. Create one with `genesis-security keygen`. See [Installation](Installation#create-your-key).
 
+**Every action is blocked and the log says `policy failed to load: deny-all`**
+Your policy file is missing, unreadable, not valid TOML, or fails validation. Run `genesis-security policy check <file>`: it lists every problem. Fix them and restart. This is deliberate (v1.1): a broken policy never silently becomes "no restrictions".
+
+**`PolicyError` when loading a policy that worked on v1.0**
+v1.0 accepted partial policies and ignored unknown keys, which could silently disable protections (GS-AUD-03). Add the missing sections (`[egress]`, `[tools]`, `[secrets]`) or fix the reported keys. Start from `genesis-security policy`.
+
 **`ValueError: hmac_key must be at least 16 bytes`**
 Use `genesis-security keygen` (32 bytes) instead of a short password.
 

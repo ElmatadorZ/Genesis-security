@@ -6,7 +6,15 @@ The policy is a TOML file. Start from the default:
 genesis-security policy > my_policy.toml
 ```
 
-Load it with `Policy.load("my_policy.toml")` or `GENESIS_SECURITY_POLICY=my_policy.toml`. Missing sections fall back to empty lists or the numeric defaults below. If you write your own file from scratch, include every section you need. An empty `irreversible` list means nothing waits for you.
+Load it with `Policy.load("my_policy.toml")` or `GENESIS_SECURITY_POLICY=my_policy.toml`, and validate it first:
+
+```bash
+genesis-security policy check my_policy.toml
+```
+
+**Validation is strict (since v1.1).** `[egress]`, `[tools]` and `[secrets]` are required; `[shell]` and `[agents]` are optional and use the defaults below. Unknown sections or keys, wrong types, invalid regexes, empty `secrets.patterns` and wildcard hosts are errors, and every problem is listed at once (with "did you mean…?" hints for typos).
+
+**A policy that fails to load puts the gate in deny-all.** Every tool call, agent message, memory write and skill load is blocked, `gate.status()["policy_ok"]` is `False`, one `policy_load_failed` audit event is written and an error is logged. The gate never falls back to the packaged default to authorize anything.
 
 ## `[egress]`
 

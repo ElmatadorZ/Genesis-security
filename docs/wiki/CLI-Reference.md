@@ -32,7 +32,7 @@ Runs 12 attack scenarios through a throwaway gate and audit log in a temp folder
 genesis-security redteam
 ```
 
-Runs the 45-case red-team suite against the installed package. `PASS` = attack stopped. `MISS` = informational L1 scanner gap. `FAIL` = real bypass. See [Red Team Guide](Red-Team-Guide).
+Runs the 49-case red-team suite against the installed package. `PASS` = attack stopped. `MISS` = informational L1 scanner gap. `FAIL` = real bypass. See [Red Team Guide](Red-Team-Guide).
 
 ## scan
 
@@ -78,6 +78,7 @@ Prints `sha256  path` per file, for use with `on_skill_load`.
 
 ```bash
 genesis-security policy > my_policy.toml
+genesis-security policy check my_policy.toml other.toml
 ```
 
 Prints the packaged default policy.

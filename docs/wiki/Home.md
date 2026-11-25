@@ -29,7 +29,7 @@ Genesis Security sits between an AI agent and its tools. Every action the agent 
 | **Platforms** | Linux, macOS, Windows |
 | **Hooks** | external content · tool calls · agent messages · memory writes · skill loads |
 | **Threat classes** | 13 ([GSX-01 … GSX-13](Threat-Model)) |
-| **Red team** | 45 cases ship with the package, 0 failures, run in CI |
+| **Red team** | 49 cases ship with the package, 0 failures, run in CI |
 | **License** | Apache 2.0 |
 
 ## The two layers

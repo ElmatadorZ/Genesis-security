@@ -1,5 +1,6 @@
 # Baseline audit probes, 2026-11-25. Read-only: uses temp files only.
 # Run from the repo root:  PYTHONPATH=. python docs/audit/baseline_probe_2026-11-25.py
+# Targets v1.0.0 (commit a5317ce). From v1.1 the partial-policy probes raise PolicyError: GS-AUD-03 fixed.
 import os, tempfile, threading, json, time
 from pathlib import Path
 from genesis_security import GenesisSecurityGate, AuditTrail, Tier, Policy

@@ -25,7 +25,7 @@ G1       PASS    intact=False          Full rewrite with recomputed hashes is de
 | `MISS` | Informational case: a known, accepted gap (L1 phrasing, custom encodings) |
 | `FAIL` | A real bypass. The exit code counts these |
 
-## What's covered (45 cases)
+## What's covered (49 cases)
 
 | Group | Cases | Attacks |
 |---|---|---|
@@ -37,6 +37,7 @@ G1       PASS    intact=False          Full rewrite with recomputed hashes is de
 | **F** Memory | F1 | rules phrased without trigger words (EN + TH) |
 | **G** Audit | G1–G4 | full rewrite, truncation, deletion, secrets in logs |
 | **H** Robustness | H1–H4 | 10 MB input, garbage brain output, malformed tiers, quarantined senders |
+| **P** Policy integrity (v1.1) | P1–P4 | partial policy, typo'd section, deny-all on every hook, wildcard host |
 | **R** Round 2 | R1–R7 | bare domains, `//host`, split secrets, metadata IP, look-alike hosts, rot13 |
 
 History, before/after results and accepted residual risk: [`docs/redteam-report.md`](https://github.com/ElmatadorZ/Genesis-security/blob/main/docs/redteam-report.md).
