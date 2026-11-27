@@ -46,7 +46,7 @@ flowchart TB
 |---|---|---|---|
 | **01 · Gate** (default) | Everyone; drop-in | Tool authorization, default-deny, policy enforcement | Security core, identity, policy engine, Execution Gateway, audit ledger |
 | **02 · Gate + Flow** (advanced) | Developers handling private data | Session information-flow state, readers = principals and sinks, declassification (ADR-0009) | same |
-| **03 · Plan-Constrained** (high assurance) | High-stakes agents (e.g. trading) | Approved plan hash, deterministic executor checking step, transition, arguments, capability (v2.0-beta design) | same |
+| **03 · Plan-Constrained** (high-assurance deployments) | High-stakes agents (e.g. trading) | Approved plan hash, deterministic executor checking step, transition, arguments, capability (v2.0-beta design) | same |
 
 Rules: one codebase; a mode is a configuration of the same engine, never a fork. The MCP gateway and any other front-end (HTTP sidecar, SDK decorator) **call the same Policy Engine and Execution Gateway**; none has its own security logic.
 
@@ -65,13 +65,25 @@ agent request ─► sink resolution (canonical URL / structured fields, verific
 
 ## Dependency chain
 
-Identity & credentials (ADR-0005) → trusted runtime & authoritative state store (ADR-0006, ADR-0009 §2) → information-flow engine (ADR-0009 §1, §3, §7, §8, §10) → sink resolution & Execution Gateway (ADR-0009 §4–§6, ADR-0003) → authenticated & authorized execution → auditable decision (ADR-0007). Each stage relies only on the stages before it; none may be implemented on assumptions about a later one.
+Build order — each stage relies only on the stages before it; none may be implemented on assumptions about a later one:
+
+Identity & credentials (ADR-0005) → trusted runtime & authoritative state store (ADR-0006, ADR-0009 §2) → audit ledger (ADR-0007) → information-flow engine (ADR-0009 §1, §3, §7, §8, §10) → sink resolution & Execution Gateway (ADR-0009 §4–§6, ADR-0003) → authenticated & authorized execution.
+
+The ledger sits **before** execution in this chain because recording is **write-before-act** (ADR-0007), in two phases:
+
+| Phase | Recorded | If recording fails |
+|---|---|---|
+| **Before the side effect** | Authorization decision, permit issue (with ledger commit), permit revalidation and consumption | BLOCK — no side effect |
+| **After the side effect** | Execution outcome (`sent` / `failed`) with issued, revalidated and consumed versions | Outcome recorded as `unknown` at the next opportunity (including restart); never retried automatically |
 
 ## Authority rule
 
 The runtime is the final authority. Agents and brains *propose*; the runtime *decides*. No path exists from model output to a looser verdict, a new scope, a new tier or a policy change (ADR-0001).
 
 ## Request path (tool call)
+
+Full sequence for every tool call; steps 4a and 4b run only in modes 02 and 03.
+
 
 1. **Provenance.** Determine `origin_tier` from the authenticated provenance chain (ADR-0003 §4) and the caller's identity (ADR-0005).
 2. **Policy.** Look up the tool. Not declared → BLOCK (default deny). Load capabilities and scopes; check the agent's role allows it.

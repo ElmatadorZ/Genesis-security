@@ -116,3 +116,11 @@ Raised in the PR #1 review and written into ADR-0003 §6 / ADR-0008 §3. **Appro
 | Implementation (v2.0 Phase 1) | **Not approved** |
 | ADR status | All remain **Proposed** |
 | Next | Batch 2 rebuilt from the baseline with an ADR-to-backlog traceability matrix; Batch 3 only after Batch 2 passes |
+
+## PR #8 Batch 2 — review round 1 (2026-11-27)
+
+| Item | Status |
+|---|---|
+| Batch 2 (711b545) | **Changes requested**: 2 BLOCKER (F2 onward sharing overstated; F9 detection vs enforcement), 9 REQUIRED. E1, E2 accepted |
+| Baseline changes made in response | Listed as errata **E3–E7** for review: E3 grant binding (ADR-0009 §8), E4 redirect dimensions (§5.4), E5 enforcement boundary mechanisms and `doctor` states (§9), E6 policy event schema and receiver self-check (§10), E7 revocation closes pooled connections and voids permits (ADR-0005 §7) |
+| Merge / Implementation | **Not approved** |

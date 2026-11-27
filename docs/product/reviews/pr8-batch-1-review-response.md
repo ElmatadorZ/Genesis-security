@@ -98,3 +98,22 @@ Reviewer's agreement that B1 needs the out-of-process precondition, and that the
 | C1 authority scope | Table row corrected: absolute URL → authority validation → strict parsing; query string and form body → strict parsing only | ADR-0009 §5.9 |
 | C2 hostname vs IP | Host classified first (bracketed → IPv6; numeric last label or `0x` label → IPv4 class; else hostname). IPv4: only four decimal octets without leading zeros; IPv6: only RFC 5952 canonical text, no embedded IPv4 or zone ID; declared literal required in the same form; hostname and IP sinks never cross-match; unique spellings make string equality sufficient | ADR-0009 §5.9 |
 | Implementation note | Trailing-slash and path-normalisation tests added to P1-20 | backlog |
+
+---
+
+# PR #8 Batch 2 — response to review round 1 (2026-11-27)
+
+| Finding | Resolution | Where |
+|---|---|---|
+| **B2-01** F2 onward sharing | Residual rewritten: the gateway checks only the destination it controls; `onward_sharing` is a declaration, not enforcement; remote handling is outside the boundary; Core does not guarantee no further sharing | Threat model F2 |
+| **B2-02** F9 direct egress | Detection (start-up check), diagnostics (`doctor` active probe) and enforcement (OS/network controls, deployment-provided) separated; four `doctor` states, `enforced (probe)` only with a detected mechanism **and** a blocked probe; out-of-process runtime stated not to close direct egress | ADR-0009 §9 (E5); F9; INV-45, INV-47 |
+| R2-01 F1 | Residual: decides where, not what; re-encoded data to an effective reader is allowed by policy; content inspection and covert channels separate | F1 |
+| R2-02 F10 | Mode 03 constrains execution, is not independent confidentiality enforcement | F10 |
+| R2-03 F17 | Every hop re-resolved; same sink on every dimension; same hostname alone is not the same sink | ADR-0009 §5.4 (E4); F17; INV-31 |
+| R2-04 F18/INV-32 | **Already in ADR-0009 §5.6** (client SVID, credential epoch, trust-bundle fp, immediate close since Batch 1 Rev4); the Batch 2 summaries had dropped it and are corrected. Added: revocation/rotation closes connections and voids permits | F18; INV-07, INV-32; ADR-0005 §7 (E7) |
+| R2-05 INV-11 grant scope | Grant record with readers, actions, nonce, expiry, uses; `grants(session, c)` matches the request's capability; use consumed with the permit | ADR-0009 §8 (E3); F7c; INV-11, INV-41 |
+| R2-06 F23/INV-42 | All cases listed and given tests; receiver self-check of its own fp added | ADR-0009 §10 (E6); F23; INV-42, INV-48 |
+| R2-07 INV-36 | Expected behaviour per input class table | Traceability |
+| R2-08 architecture | Ledger placed before execution in the build chain; write-before-act in two phases; request path marked as full sequence. "HA" appeared only in the pasted summary — the document says "high-assurance deployments" | Architecture |
+| R2-09 traceability | Status lifecycle MAPPED → … → REGRESSION_VERIFIED; 85 test specifications with IDs, scenarios and expected results; earlier "0 without a negative test" claim withdrawn | Traceability |
+| E1 event schema | Ledger schema 1 for `flow.policy_*` (+ `flow.policy_unknown`); no migration needed — never implemented; v1 code emits `GSX-08` only for memory writes | ADR-0009 §10 (E6); INV-49 |

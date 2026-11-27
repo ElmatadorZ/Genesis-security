@@ -163,7 +163,7 @@ Resolution rules:
 1. **The gateway performs the egress.** Network- and message-capable tools in mode 02 must use the gateway's client; a tool that opens its own connection is outside the boundary (§9).
 2. **Canonicalize** (ADR-0003 §5): scheme and host lower-cased, IDNA host, default port made explicit, path percent-decoded once then normalised; dot-segments, encoded slashes (`%2F`), backslashes, userinfo, and mixed-script hosts → **BLOCK** (not HOLD: ambiguity is not resolved by a human click).
 3. **Match** scheme, host, port, path prefix and method exactly.
-4. **Redirects off by default.** If a sink enables them, each hop is re-resolved and must match the *same* sink; a hop to anything else aborts before any body is sent on that hop.
+4. **Redirects off by default.** If a sink enables them, every hop is resolved again from scratch and must match the **same sink on every dimension**: scheme, host, port, path prefix, method, verified destination identity at the sink's verification level (rule 8), and recipient fields (rule 9); the session's effective readers and the permit's scope are re-checked as for a new request. The same hostname alone never means the same sink. A hop that differs in any dimension aborts before any body is sent on that hop.
 5. **DNS:** resolve once per new connection, refuse private/loopback/link-local/unspecified addresses unless the sink declares them, and connect to the address that was checked (no re-resolution mid-request) — closing DNS rebinding.
 6. **Connection reuse:** the gateway's pool is keyed by `(sink name, verified IP, port, verification mode, pinned keys)`, and for `mtls-spiffe` also by `(client SVID identity, client credential epoch, trust-bundle fingerprint)`. When any of these changes — pins edited, credential rotated or revoked, trust bundle updated — the affected connections are closed **immediately**, not at pool expiry. A connection is reused only for the **same sink** and the same verified address, never for another sink, even one with the same host. HTTP/2 connection coalescing and TLS session resumption across sinks are disabled. Pooled connections are closed on policy reload, on sink definition change, and after a bounded lifetime (default 5 min), after which DNS and TLS checks run again. Tools cannot supply their own client or pool.
 7. **Proxies:** environment proxy settings are ignored; a proxy is used only if declared on the sink. The runtime resolves and checks the end server's address itself (rule 5) and sends `CONNECT <verified IP>:<port>` — never a hostname — then runs TLS to the end server with the sink's hostname for SNI and verification (rule 8). A proxy that will only accept hostnames (and so resolves DNS itself) is **unsupported in mode 02**: it would remove the DNS-rebinding guarantee.
@@ -253,11 +253,37 @@ Allowed readers are the **intersection** of the readers of every class in the se
 | **Human-approved** (Human Gate) | Yes | Owner identity authenticated; dedicated declassification prompt showing class, session, destination scope and reason |
 | **Owner-authorized policy rule** | Yes, narrowly | Rule created or approved by the owner, signed/authenticated with the policy (ADR-0004); must name class, allowed reader(s) or sink(s), max use count and expiry; may not name "any" |
 
-Every declassification records: owner identity, session ID, task ID, data class, granted scope (readers/sinks), reason, policy ID + version, timestamp, and a **single-use approval token** bound to `(session_id, class, scope, nonce, expiry)`. A token is rejected for any other session, class or scope, after use, or after expiry. A grant is stored as `(session_id, class, readers/sinks)` and adds readers **for that class in that session only** (§1 formula); it never edits the class's readers in policy and never applies to any other class.
+Every declassification records: owner identity, session ID, task ID, data class, granted scope (readers/sinks), reason, policy ID + version, timestamp, and a **single-use approval token** bound to `(session_id, class, scope, nonce, expiry)`. A token is rejected for any other session, class or scope, after use, or after expiry. A grant is stored as
+
+```
+grant = { grant_id, session_id, class, readers: [sink or principal, …],   # never "any"
+          actions: [capability, …],          # e.g. ["network"]; the egress capability it may be used for
+          nonce, expires_at, uses_left,      # uses_left = 1 for Human Gate approvals; ≤ the rule's max for policy rules
+          approved_by, policy_id, policy_version, reason }
+```
+
+`grants(session, c)` in the §1 formula returns only the readers of grants that match **this session and this class**, are unexpired, have `uses_left > 0`, and list the **capability of the request being evaluated**. A grant therefore widens readers only for its own class, session, destinations and action: a grant for `accounts` to sink A does not authorize sending to sink B, nor a `message` action when it lists only `network`. A use is counted when the permit that relied on it is consumed (§4 step 3), in the same transaction; a grant whose use is consumed by one permit cannot authorize another. Grants never edit the class's readers in policy and never apply to any other class.
 
 ### 9. Enforcement boundary
 
-Guarantees hold **only for egress performed by the Execution Gateway**. Deployments declare their boundary. In mode 02 the runtime refuses to start if an in-process network/message tool is registered outside the gateway; for out-of-process tools the deployment guide requires OS-level egress rules that permit only the gateway. `genesis-security doctor` reports what it verified and what it could not. Any failure to read or write flow state → **BLOCK**.
+Guarantees hold **only for egress performed by the Execution Gateway**. Three different mechanisms are involved, and only one of them enforces:
+
+| Mechanism | What it does | What it does **not** do |
+|---|---|---|
+| **Runtime start-up check** (detection) | Refuses to start mode 02 if a network/message tool *known to the runtime* is registered outside the gateway | Prove that agent code cannot open a socket, start a subprocess or reach the network another way |
+| **`doctor`** (diagnostics) | Reports the deployment's state; runs an **active egress probe** from the agent's execution context (same OS user, namespace or container) to a test address outside the gateway | Enforce anything; a probe shows only that *that* attempt, to *that* address and port, failed at *that* time |
+| **OS / network enforcement** (the only enforcement) | Firewall rules, network namespace, container network policy or equivalent that allow the agent's execution context to reach **only** the gateway | — this is provided by the deployment, not by Genesis |
+
+An out-of-process runtime does **not** by itself close direct egress: the agent process can still open sockets unless the OS prevents it.
+
+`doctor` reports the egress boundary as exactly one of:
+
+- **`enforced (probe)`** — an OS/network enforcement mechanism is detected **and** the active probe from the agent's context was blocked;
+- **`configured (unverified)`** — an enforcement mechanism is detected but the probe could not run (permissions, no agent context available);
+- **`not enforced`** — the probe reached the test address directly;
+- **`unknown`** — no mechanism detected and no probe possible.
+
+Only `enforced (probe)` lets reports state the §11 guarantees without the "egress outside the gateway" caveat, and even then the claim is limited to what the probe covered. Mode 02 runs in every state (the owner may accept the limitation), but every report and `doctor` run states it. Any failure to read or write flow state → **BLOCK**.
 
 ### 10. Sessions, tasks and envelopes across policy versions (closes R3, R4)
 
@@ -287,6 +313,21 @@ Comparison never imports the sender's rules: the receiver always computes reader
 | Same version as current or previous, **different** fp | Inconsistent (forged or corrupted policy state) | Owner-only, T3, ledger event `flow.policy_mismatch` (alert) |
 | Version newer than current | Receiver has not installed it | Owner-only, T3 until the owner installs that policy; the envelope never installs or selects a policy |
 | Any other combination / unknown fp | Unknown policy state | Owner-only, T3 |
+
+**Policy events (ledger schema 1).** Every row above other than "same rules" writes one event:
+
+```
+{ "event": "flow.policy_drift" | "flow.policy_stale" | "flow.policy_mismatch" | "flow.policy_unknown",
+  "schema": 1, "ts", "session_id", "sender_identity",
+  "policy_id": {"envelope", "receiver"},
+  "policy_version": {"envelope", "receiver_current", "receiver_previous"},
+  "policy_fp": {"envelope", "receiver_current", "receiver_previous"},
+  "action": "compat_map" | "owner_only_t3" }
+```
+
+`flow.policy_drift` = previous version and previous fp; `flow.policy_stale` = version older than previous; `flow.policy_mismatch` = same version as current or previous but different fp (alert); `flow.policy_unknown` = every other non-matching case, including a different `policy_id` and a newer version. Event names and the field set are stable within schema 1; changes increase `schema`. No existing ledger contains these events — they were never implemented (the v1 code emits `GSX-08` only for memory writes) — so no ledger migration is needed.
+
+**Receiver self-check.** At start-up and on every policy install the receiver recomputes `policy_fp` from the effective policy it has actually loaded and compares it with the stored current fp; a mismatch → the runtime refuses to start mode 02 (or rejects the install). The envelope comparison therefore never runs against a fingerprint that differs from the rules being enforced.
 
 No envelope can make the receiver evaluate under an older policy: the receiver evaluates under its **current** policy in every row; the table only limits how much of the sender's labelling it trusts.
 
