@@ -94,3 +94,33 @@ Raised in the PR #1 review and written into ADR-0003 §6 / ADR-0008 §3. **Appro
 | R3 | v1.x security-fix window after v2.0 ships: **6 months** | **Approved** 2026-11-25 |
 | R4 | Security fixes may change behaviour in minor/patch releases, always toward stricter, with advisory + migration notice | **Approved** 2026-11-25 |
 
+## Architecture review round 3 — clarifications (2026-11-25)
+
+| Item | Decision / status |
+|---|---|
+| Split v2.0-alpha | **Approved**: alpha.1 *Core Enforcement* (default-deny, capability registry, information flow, readers, cross-agent taint, fail-closed + audit); alpha.2 *Integration & Validation* (MCP adapter, AgentDojo, adversarial + regression testing, identity/credential hardening, docs + migration). Item placement preliminary until confirmed. No date pressure: alpha.1 ships only when its gate passes |
+| PR #7 (v1.1 code) | **Separate review**; not blocked by the earlier "not approved", which referred to v2.0 architecture implementation only. D5 is not blanket approval of all code |
+| PR #8 (architecture docs) | Under review; its approval does not substitute for PR #7's |
+| Phase 1 — v2.0 core implementation | **Not approved** |
+| Owner-only declassification; undeclared data = private; action-selection leakage as residual risk | **Agreed** |
+
+
+## PR #8 Batch 1 — architecture review result (2026-11-25)
+
+| Item | Status |
+|---|---|
+| Batch 1 (ADR-0005, ADR-0009) architecture / documentation review | **Passed** at Rev7 (commit `556224e`), after review rounds Rev1–Rev7. Scope: design-level findings on the diffs presented; not an independent security audit, source review or CI verification |
+| Baseline | Frozen as the **Batch 1 architecture baseline**. Later changes to ADR-0005/0009 must be listed as errata or new review items |
+| Errata after acceptance | **E1** — ADR-0009 used `GSX-08` (catalogue: memory/genome poisoning) as a policy-drift event code; replaced by ledger events `flow.policy_drift`, `flow.policy_stale`, `flow.policy_mismatch`. **E2** — ADR-0009 §6 step 3 still referred to `confidentiality.readers`; now `effective_readers(session)` per §1. Both to be confirmed in Batch 2 review |
+| Merge of PR #8 | **Not approved** |
+| Implementation (v2.0 Phase 1) | **Not approved** |
+| ADR status | All remain **Proposed** |
+| Next | Batch 2 rebuilt from the baseline with an ADR-to-backlog traceability matrix; Batch 3 only after Batch 2 passes |
+
+## PR #8 Batch 2 — review round 1 (2026-11-27)
+
+| Item | Status |
+|---|---|
+| Batch 2 (711b545) | **Changes requested**: 2 BLOCKER (F2 onward sharing overstated; F9 detection vs enforcement), 9 REQUIRED. E1, E2 accepted |
+| Baseline changes made in response | Listed as errata **E3–E7** for review: E3 grant binding (ADR-0009 §8), E4 redirect dimensions (§5.4), E5 enforcement boundary mechanisms and `doctor` states (§9), E6 policy event schema and receiver self-check (§10), E7 revocation closes pooled connections and voids permits (ADR-0005 §7) |
+| Merge / Implementation | **Not approved** |

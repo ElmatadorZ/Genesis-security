@@ -23,6 +23,8 @@ A security enforcement layer that decides what AI agents may trust, access, exec
 | P3 | **No privileged action without policy authorization.** | Default deny: a tool runs only if policy declares it and its capabilities (ADR-0003). |
 | P4 | **Every security decision is auditable.** | Every verdict is in a tamper-evident ledger, with no secrets in it (ADR-0007). |
 | P5 | **Fail closed.** | Errors, timeouts, missing config and unknown inputs never result in ALLOW (ADR-0004). |
+| P7 | **A security label is only as strong as the enforcement boundary that preserves it.** | Labels, taint and flow state are claimed only for paths the runtime enforces (ADR-0009 §8). |
+| P8 | **Never confuse detection with enforcement.** | A detector, a policy, an identity or a log is not a control until something enforces it: detection ≠ prevention, policy ≠ enforcement, identity ≠ authentication, audit log ≠ integrity. |
 | P6 | **Never trust a security claim without reproducible evidence.** | Alignment with a framework is stated as a mapping with tests, never as certification. Every claim links to a test anyone can rerun. |
 
 ## 2. Problem and users
@@ -88,9 +90,22 @@ Each requirement has an ID used by the backlog and by tests. **MUST** items gate
 - **FR-POL-4 (SHOULD)** `genesis-security policy check` lints a policy and warns about risky grants (e.g. `node`, `find`, wildcard hosts).
 
 ### Identity
+- **FR-ID-0 (MUST)** Agents and the owner have stable URI identities (SPIFFE-ID shaped); identity, credential and authorization are separate (ADR-0005). No claim of WIMSE/SPIFFE support until a provider implements it.
 - **FR-ID-1 (MUST)** Per-agent keys: a message signed by agent A cannot verify as agent B.
 - **FR-ID-2 (MUST)** Only keys in the `keygen` format (256 bits from the OS CSPRNG, versioned prefix, checksum) are accepted; passwords and padded text are refused regardless of length. Length is not treated as proof of entropy (ADR-0005).
 - **FR-ID-3 (SHOULD)** Key rotation with an overlap window; revocation list.
+
+### Information flow (mode 02 · Gate + Flow)
+- **FR-FLOW-1 (MUST)** Session flow state accumulates the data classes read; inherited by turns, tasks (unless explicitly clean) and agent relays; persisted (ADR-0009 §1, §6).
+- **FR-FLOW-2 (MUST)** Readers are principals and named sinks (endpoint + principal + onward-sharing policy), not host names; combined classes use the intersection of readers (§3, §4).
+- **FR-FLOW-3 (MUST)** Egress to a destination outside the readers is BLOCK regardless of content encoding (§5).
+- **FR-FLOW-4 (MUST)** Only the owner declassifies; every declassification is audited (§7).
+- **FR-FLOW-5 (MUST)** The enforcement boundary is declared and checked where possible; guarantees are stated only inside it (§8).
+
+### Plan-constrained execution (mode 03, v2.0-beta design)
+- **FR-PLAN-1 (SHOULD)** Owner-approved plan with a hash covering every security-relevant detail (steps, tools, argument constraints, capabilities, destinations); a deterministic executor checks step ID, allowed transition, arguments and capability; deviation → HOLD/BLOCK.
+- **FR-PLAN-2 (SHOULD)** Defined handling of dynamic branching, retry, timeout, plan expiry and emergency stop.
+- Not called CFI until proven; not a substitute for market-risk controls.
 
 ### State
 - **FR-ST-1 (MUST)** Nonces, strikes, quarantine and task taint persist across restarts (stdlib SQLite).
@@ -104,7 +119,7 @@ Each requirement has an ID used by the backlog and by tests. **MUST** items gate
 ### Integration
 - **FR-INT-1 (MUST)** Stable, versioned public API (ADR-0008).
 - **FR-INT-2 (MUST)** Provenance helper that derives `origin_tier` from message sources, so integrators don't hand-tag it.
-- **FR-INT-3 (SHOULD)** MCP gateway: gate `tools/call`, pin tool descriptions, enforce per-server scopes.
+- **FR-INT-3 (MUST for v2.0)** MCP adapter on the Execution Gateway: gates `tools/call`, pins tool descriptions, enforces per-server scopes, with **no security logic of its own** (moved up by review round 2).
 - **FR-INT-4 (SHOULD)** Adapters for Claude, OpenAI, Gemini and Ollama tool-calling loops; SkynetClaw reference integration.
 
 ## 6. Non-functional requirements
@@ -183,5 +198,7 @@ Recorded in [Governance Decision v1.0](governance-decisions.md) (2026-11-25):
 4. **Phase 1 code** — approved to start with v1.1 (D5, updated 2026-11-25).
 
 Review additions R1–R4 (compat-mode opt-in, v3.0 removal, 6-month v1.x fix window, security over compatibility) were approved on 2026-11-25 — see [Governance](governance-decisions.md#additions-from-architecture-review-r1r4). Phase 1 code was approved to start with v1.1 (D5).
+
+Architecture review round 2 (2026-11-25) approved in principle: ADR-0009 (Gate + Flow), URI identity (ADR-0005), MCP gateway promotion, AgentDojo evaluation; Plan-Constrained Execution approved for beta design. See [review response](reviews/pr-adr-0009-review-2-response.md).
 
 Still open: **ACS overlap** (adopt, map to, or ignore the OWASP Agent Control Standard) — backlog P0-05.
